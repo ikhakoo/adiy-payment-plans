@@ -42,7 +42,7 @@ services:
     plan: starter
     schedule: "0 * * * *"
     buildCommand: "true"
-    startCommand: curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$SHOPIFY_APP_URL/jobs/charges"
+    startCommand: 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" "$SHOPIFY_APP_URL/jobs/charges"'
     envVars:
       - key: CRON_SECRET
         fromService:
