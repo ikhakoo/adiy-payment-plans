@@ -1,0 +1,140 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+enum PlanSource {
+  STOREFRONT
+  REP
+}
+
+enum PlanStatus {
+  ACTIVE // charging on schedule
+  PAST_DUE // an installment failed and is being retried
+  PAUSED // staff paused charging
+  COMPLETED // outstanding balance reached zero, fulfillment released
+  CANCELLED // order cancelled / plan stopped by staff
+  DEFAULTED // retries exhausted, needs a human decision
+}
+
+enum InstallmentStatus {
+  SCHEDULED
+  PROCESSING // charge sent to Shopify, waiting on the async result
+  PAID
+  FAILED // last attempt failed; nextAttemptAt says when we retry
+  SKIPPED
+  WAIVED
+}
+
+// One payment plan per original order. Amounts are merchandise before tax and shipping:
+// `total` is the full price, `paid`/`outstanding` move as each monthly billing succeeds.
+model PaymentPlan {
+  id                String     @id @default(cuid())
+  shop              String
+  orderId           String     @unique // gid://shopify/Order/…
+  orderName         String // "#1234"
+  customerId        String?
+  customerEmail     String?
+  customerName      String?
+  contractId        String?    @unique // gid://shopify/SubscriptionContract/… — what we bill
+  sellingPlanId     String?
+  source            PlanSource @default(STOREFRONT)
+  repStaffId        String?
+  installmentsCount Int
+  intervalMonths    Int        @default(1)
+  currency          String     @default("USD")
+  total             Decimal    @db.Decimal(12, 2)
+  paid              Decimal    @db.Decimal(12, 2)
+  outstanding       Decimal    @db.Decimal(12, 2)
+  status            PlanStatus @default(ACTIVE)
+  fulfillmentHeld   Boolean    @default(false)
+  termsVersion      String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  completedAt       DateTime?
+
+  installments Installment[]
+  events       AuditEvent[]
+
+  @@index([shop, status])
+}
+
+model Installment {
+  id                 String            @id @default(cuid())
+  planId             String
+  plan               PaymentPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  seq                Int // 1 = the checkout payment
+  dueDate            DateTime
+  amount             Decimal           @db.Decimal(12, 2)
+  status             InstallmentStatus @default(SCHEDULED)
+  attempts           Int               @default(0)
+  nextAttemptAt      DateTime?
+  lastError          String?
+  billingAttemptId   String?
+  // Changes on every attempt (planId:seq:attempt) so a retry is a new charge, while a
+  // crash-and-resend of the *same* attempt is deduplicated by Shopify.
+  idempotencyKey     String?
+  chargeOrderId      String? // the order Shopify created for this payment (seq 1 = the original order)
+  chargeOrderName    String?
+  paidAt             DateTime?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@unique([planId, seq])
+  @@index([status, dueDate])
+}
+
+model AuditEvent {
+  id        String      @id @default(cuid())
+  planId    String
+  plan      PaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  type      String // plan_created, charge_started, charge_succeeded, charge_failed, rescheduled, …
+  actor     String      @default("system") // "system" or a staff member id/email
+  message   String?
+  data      Json?
+  createdAt DateTime    @default(now())
+
+  @@index([planId, createdAt])
+}
+
+// Per-shop business rules. Defaults are placeholders until the business-rules doc is signed off.
+model Settings {
+  shop               String   @id
+  // Days after each failed attempt to retry. Once they run out the plan is DEFAULTED.
+  retryDays          Int[]    @default([3, 7])
+  reminderLeadDays   Int      @default(3)
+  sellingPlanGroupId String?
+  // Hidden "Payment plan installment" product that monthly payments are billed for.
+  installmentProductId String?
+  installmentVariantId String?
+  // { "gid://shopify/SellingPlan/…": 4, … } — how many installments each selling plan means
+  planCounts         Json?
+  updatedAt          DateTime @updatedAt
+}
