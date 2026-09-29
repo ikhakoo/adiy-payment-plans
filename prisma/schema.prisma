@@ -136,5 +136,9 @@ model Settings {
   installmentVariantId String?
   // { "gid://shopify/SellingPlan/…": 4, … } — how many installments each selling plan means
   planCounts         Json?
+  // Pay in full discount (one-time purchases of plan products): "none" | "percent" | "amount"
+  payInFullType       String   @default("none")
+  payInFullValue      Decimal? @db.Decimal(12, 2)
+  payInFullDiscountId String? // gid://shopify/DiscountAutomaticNode/…
   updatedAt          DateTime @updatedAt
 }

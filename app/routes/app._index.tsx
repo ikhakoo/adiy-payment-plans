@@ -16,6 +16,7 @@ import {
   createPaymentPlanGroup,
 } from "../lib/shopify-ops.server";
 import { runChargeCycle } from "../lib/charges.server";
+import { syncPayInFull, type PayInFullType } from "../lib/pay-in-full.server";
 import { formatMoney, statusTone } from "../lib/format";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -72,6 +73,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const byStatus = Object.fromEntries(counts.map((c) => [c.status, c._count]));
   return {
     configured: Boolean(settings?.sellingPlanGroupId && settings.installmentVariantId),
+    payInFull: {
+      type: (settings?.payInFullType ?? "none") as PayInFullType,
+      value: settings?.payInFullValue ? String(settings.payInFullValue) : "",
+    },
     kpis: {
       outstanding: String(outstanding._sum.outstanding ?? 0),
       collectedThisMonth: String(collected._sum.amount ?? 0),
@@ -129,7 +134,29 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!settings?.sellingPlanGroupId) return { ok: false, message: "Set up payment plans first" };
     const productIds = JSON.parse(String(form.get("productIds") ?? "[]")) as string[];
     if (productIds.length) await addProductsToGroup(admin, settings.sellingPlanGroupId, productIds);
+    // New plan products should get the Pay in full discount too.
+    if (settings.payInFullType !== "none") await syncPayInFull(admin, shop);
     return { ok: true, message: `Payment plans added to ${productIds.length} product(s)` };
+  }
+
+  if (intent === "pay-in-full") {
+    const type = String(form.get("type")) as PayInFullType;
+    const value = Number(form.get("value") || 0);
+    if (!["none", "percent", "amount"].includes(type)) return { ok: false, message: "Pick a discount type" };
+    if (type !== "none" && !(value > 0)) return { ok: false, message: "Enter a discount above 0" };
+    if (type === "percent" && value >= 100) return { ok: false, message: "A percentage has to be under 100" };
+    await db.settings.update({
+      where: { shop },
+      data: { payInFullType: type, payInFullValue: type === "none" ? null : value.toFixed(2) },
+    });
+    await syncPayInFull(admin, shop);
+    return {
+      ok: true,
+      message:
+        type === "none"
+          ? "Pay in full discount turned off"
+          : `Pay in full discount saved: ${type === "percent" ? `${value}% off` : `$${value} off`}`,
+    };
   }
 
   if (intent === "run-cycle") {
@@ -144,7 +171,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Dashboard() {
-  const { configured, kpis, plans } = useLoaderData<typeof loader>();
+  const { configured, kpis, plans, payInFull } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [params, setParams] = useSearchParams();
@@ -211,6 +238,37 @@ export default function Dashboard() {
           <Stat label="Active / completed" value={`${kpis.active} / ${kpis.completed}`} />
         </s-grid>
       </s-section>
+
+      {configured && (
+        <s-section heading="Pay in full discount">
+          <s-paragraph>
+            Shown on the Pay in full card and applied automatically at checkout to one-time
+            purchases of payment-plan products. It never applies to Pay in 4 / 6 / 8, and it
+            doesn&apos;t stack with other discount codes.
+          </s-paragraph>
+          <fetcher.Form method="post">
+            <input type="hidden" name="intent" value="pay-in-full" />
+            <s-stack direction="inline" gap="base" alignItems="end">
+              <s-select name="type" label="Discount" value={payInFull.type}>
+                <s-option value="none">No discount</s-option>
+                <s-option value="percent">% off</s-option>
+                <s-option value="amount">$ off</s-option>
+              </s-select>
+              <s-number-field
+                name="value"
+                label="Amount"
+                defaultValue={payInFull.value}
+                min={0}
+                step={0.01}
+                placeholder="e.g. 5"
+              />
+              <s-button type="submit" variant="primary" {...(busy ? { loading: true } : {})}>
+                Save
+              </s-button>
+            </s-stack>
+          </fetcher.Form>
+        </s-section>
+      )}
 
       <s-section heading="Plans" padding="none">
         <s-box padding="base">
