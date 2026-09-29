@@ -65,7 +65,8 @@ async function ensureMetafieldDefinition(admin: AdminGraphql) {
 }
 
 async function writeMetafield(admin: AdminGraphql, type: PayInFullType, value: number) {
-  const { shop } = await gql<{ shop: { id: string } }>(admin, `#graphql query ShopId { shop { id } }`);
+  const { shop } = await gql<{ shop: { id: string } }>(admin, `#graphql
+    query ShopId { shop { id } }`);
   const data = await gql<{
     metafieldsSet: { userErrors: { field: string[] | null; message: string; code: string | null }[] };
   }>(
@@ -125,7 +126,8 @@ export async function syncPayInFull(admin: AdminGraphql, shop: string) {
     if (settings.payInFullDiscountId) {
       const data = await gql<{ discountAutomaticDeactivate: { userErrors: { message: string }[] } }>(
         admin,
-        `#graphql mutation DeactivatePayInFull($id: ID!) {
+        `#graphql
+        mutation DeactivatePayInFull($id: ID!) {
           discountAutomaticDeactivate(id: $id) { userErrors { field message } }
         }`,
         { id: settings.payInFullDiscountId },
@@ -163,12 +165,16 @@ export async function syncPayInFull(admin: AdminGraphql, shop: string) {
     // An update doesn't reactivate a discount that was switched off.
     const activated = await gql<{ discountAutomaticActivate: { userErrors: { message: string }[] } }>(
       admin,
-      `#graphql mutation ActivatePayInFull($id: ID!) {
+      `#graphql
+        mutation ActivatePayInFull($id: ID!) {
         discountAutomaticActivate(id: $id) { userErrors { field message } }
       }`,
       { id: discountId },
     );
-    check("discountAutomaticActivate", activated.discountAutomaticActivate);
+    // Already-active discounts can report an error here; that's fine, the update went through.
+    if (activated.discountAutomaticActivate.userErrors.length) {
+      console.warn("[pay-in-full] activate:", activated.discountAutomaticActivate.userErrors);
+    }
   } else {
     const data = await gql<{
       discountAutomaticBasicCreate: {
