@@ -3,6 +3,9 @@ import db from "../db.server";
 import { eligibleOrders, LIMITS, portalAllowed, rewardSettings, submissionBlocker } from "../lib/rewards.server";
 import { esc, moneyRange, PORTAL_PATH, portalContext, portalPage } from "../lib/portal.server";
 
+// Changes on every deploy so browsers fetch the current uploader instead of a cached one.
+const SCRIPT_VERSION = Date.now().toString(36);
+
 // GET /apps/rewards/submit?order=<id>&type=<rewardTypeId> — upload page for one reward.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, customerId, liquid } = await portalContext(request);
@@ -82,7 +85,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           <button class="btn" id="rw-submit" disabled>Submit for review</button>
         </div></div>
       </div>
-      <script src="${process.env.SHOPIFY_APP_URL}/rewards-upload.js" defer></script>
+      <script src="${process.env.SHOPIFY_APP_URL}/rewards-upload.js?v=${SCRIPT_VERSION}" defer></script>
     `),
   );
 };
