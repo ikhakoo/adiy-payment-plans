@@ -41,7 +41,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const orderId = `gid://shopify/Order/${str("orderId").replace(/\D/g, "")}`;
         const settings = await rewardSettings(shop);
         const [data, type] = await Promise.all([
-          eligibleOrders(admin, customerId, settings.eligibleDays),
+          eligibleOrders(admin, customerId, settings.eligibleDays, { testMode: !settings.portalEnabled }),
           db.rewardType.findFirst({ where: { id: str("typeId"), shop } }),
         ]);
         if (!portalAllowed(settings, data?.email)) return fail("Rewards are coming soon.", 403);

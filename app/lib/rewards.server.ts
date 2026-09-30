@@ -52,6 +52,14 @@ export function portalAllowed(
   return Boolean(email && settings.testerEmails.includes(email.trim().toLowerCase()));
 }
 
+/** Testers on a portal that isn't live yet: shown a banner and allowed unfulfilled orders. */
+export function isTestMode(
+  settings: { portalEnabled: boolean; testerEmails: string[] },
+  email: string | null | undefined,
+) {
+  return !settings.portalEnabled && portalAllowed(settings, email);
+}
+
 /** The editable reward list; seeded with the starting list the first time. */
 export async function rewardTypes(shop: string, { activeOnly = false } = {}) {
   if ((await db.rewardType.count({ where: { shop } })) === 0) {
@@ -102,7 +110,12 @@ export interface PortalOrder {
  * LTL carriers don't always report delivery), not cancelled or refunded, and not a
  * payment-plan installment order.
  */
-export async function eligibleOrders(admin: AdminGraphql, customerId: string, eligibleDays: number) {
+export async function eligibleOrders(
+  admin: AdminGraphql,
+  customerId: string,
+  eligibleDays: number,
+  { testMode = false } = {},
+) {
   const res = await admin.graphql(PORTAL_ORDERS, { variables: { id: customerId } });
   const json = (await res.json()) as {
     data?: {
@@ -135,7 +148,8 @@ export async function eligibleOrders(admin: AdminGraphql, customerId: string, el
     if (o.tags.includes("payment-plan-installment")) continue;
     const delivered = o.fulfillments.find((f) => f.displayStatus === "DELIVERED");
     const oldEnough = o.fulfillments.find((f) => new Date(f.createdAt).getTime() <= cutoff);
-    if (!delivered && !oldEnough) continue;
+    // Soft-launch testers can use any live order, so the flow can be tried end to end.
+    if (!delivered && !oldEnough && !testMode) continue;
     const line = o.lineItems.nodes[0];
     orders.push({
       id: o.id,

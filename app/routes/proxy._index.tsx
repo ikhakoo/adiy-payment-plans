@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
-import { eligibleOrders, portalAllowed, rewardSettings, rewardTypes } from "../lib/rewards.server";
+import { eligibleOrders, isTestMode, portalAllowed, rewardSettings, rewardTypes } from "../lib/rewards.server";
 import { esc, money, moneyRange, PORTAL_PATH, portalContext, portalPage } from "../lib/portal.server";
 
 // GET /apps/rewards — the customer's rewards home.
@@ -21,7 +21,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const settings = await rewardSettings(shop);
   const [data, types, submissions, conn] = await Promise.all([
-    eligibleOrders(admin, customerId, settings.eligibleDays),
+    eligibleOrders(admin, customerId, settings.eligibleDays, { testMode: !settings.portalEnabled }),
     rewardTypes(shop, { activeOnly: true }),
     db.submission.findMany({ where: { shop, customerId, status: { not: "DRAFT" } } }),
     db.googleConnection.findUnique({ where: { shop } }),
@@ -87,6 +87,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return liquid(
     portalPage(`
+      ${isTestMode(settings, data?.email) ? `<div class="notice"><strong>Test mode</strong> — the portal isn't live yet. As a tester you can use any of your orders, even unfulfilled ones.</div>` : ""}
       <h1>Deck Rewards</h1>
       <p>Hi ${esc(data?.name?.split(" ")[0] ?? "there")} — share your deck and earn Amazon gift cards. Every
         submission is reviewed by our team; rewards don't depend on what you say, just that it's clear and genuine.</p>

@@ -16,7 +16,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const orderId = `gid://shopify/Order/${numericOrderId}`;
   const settings = await rewardSettings(shop);
   const [data, type, conn] = await Promise.all([
-    eligibleOrders(admin, customerId, settings.eligibleDays),
+    eligibleOrders(admin, customerId, settings.eligibleDays, { testMode: !settings.portalEnabled }),
     db.rewardType.findFirst({ where: { id: url.searchParams.get("type") ?? "", shop } }),
     db.googleConnection.findUnique({ where: { shop } }),
   ]);
