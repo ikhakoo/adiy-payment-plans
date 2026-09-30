@@ -33,6 +33,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       eligibleDays: settings.eligibleDays,
       holdDays: settings.holdDays,
       minCashout: String(settings.minCashout),
+      referralFriendAmount: String(settings.referralFriendAmount),
+      referralReward: String(settings.referralReward),
+      referralMinOrder: String(settings.referralMinOrder),
+      referralWaitDays: settings.referralWaitDays,
+      referralCodeDays: settings.referralCodeDays,
       agreementText: settings.agreementText,
       agreementVersion: settings.agreementVersion,
       portalEnabled: settings.portalEnabled,
@@ -75,6 +80,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const eligibleDays = Number(form.get("eligibleDays"));
     const holdDays = Number(form.get("holdDays"));
     const minCashout = Number(form.get("minCashout"));
+    const referral = {
+      referralFriendAmount: Number(form.get("referralFriendAmount")),
+      referralReward: Number(form.get("referralReward")),
+      referralMinOrder: Number(form.get("referralMinOrder")),
+      referralWaitDays: Number(form.get("referralWaitDays")),
+      referralCodeDays: Number(form.get("referralCodeDays")),
+    };
+    if (
+      !(referral.referralFriendAmount > 0) ||
+      !(referral.referralReward > 0) ||
+      !(referral.referralMinOrder >= 0) ||
+      !(referral.referralWaitDays >= 0) ||
+      !(referral.referralCodeDays >= 1)
+    ) {
+      return { ok: false, message: "Check the referral values" };
+    }
     const agreementText = String(form.get("agreementText") ?? "").trim();
     if (!(perOrderCap > 0) || !(eligibleDays >= 0) || !(holdDays >= 0) || !(minCashout >= 1) || !agreementText) {
       return { ok: false, message: "Check the values — all fields are required" };
@@ -92,6 +113,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         eligibleDays,
         holdDays,
         minCashout: minCashout.toFixed(2),
+        referralFriendAmount: referral.referralFriendAmount.toFixed(2),
+        referralReward: referral.referralReward.toFixed(2),
+        referralMinOrder: referral.referralMinOrder.toFixed(2),
+        referralWaitDays: referral.referralWaitDays,
+        referralCodeDays: referral.referralCodeDays,
         agreementText,
         portalEnabled,
         testerEmails,
@@ -242,6 +268,15 @@ export default function RewardsSettings() {
                 step={1}
               />
             </s-stack>
+            <s-heading>Referrals</s-heading>
+            <s-stack direction="inline" gap="base">
+              <s-number-field name="referralFriendAmount" label="Friend's discount ($)" defaultValue={settings.referralFriendAmount} min={1} step={1} />
+              <s-number-field name="referralReward" label="Referrer's reward ($)" defaultValue={settings.referralReward} min={1} step={1} />
+              <s-number-field name="referralMinOrder" label="Friend's minimum order ($)" defaultValue={settings.referralMinOrder} min={0} step={1} />
+              <s-number-field name="referralWaitDays" label="Days after delivery before paying the referrer" defaultValue={String(settings.referralWaitDays)} min={0} step={1} />
+              <s-number-field name="referralCodeDays" label="Friend's code expires after (days)" defaultValue={String(settings.referralCodeDays)} min={1} step={1} />
+            </s-stack>
+            <s-paragraph color="subdued">Changes apply to codes issued from now on.</s-paragraph>
             <s-text-area
               name="agreementText"
               label={`Content-use agreement (version ${settings.agreementVersion}) — needs legal sign-off`}

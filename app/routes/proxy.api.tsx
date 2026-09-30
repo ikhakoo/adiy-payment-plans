@@ -13,6 +13,7 @@ import {
 } from "../lib/rewards.server";
 import { portalContext, storefrontHosts } from "../lib/portal.server";
 import { CashoutError, requestCashout } from "../lib/ledger.server";
+import { claimReferral, ReferralError } from "../lib/referrals.server";
 
 // POST /apps/rewards/api — JSON actions for the upload page. Every action is scoped to the
 // signed-in customer (from Shopify's signed proxy request), never to IDs the browser sends.
@@ -20,11 +21,27 @@ const fail = (message: string, status = 400) => Response.json({ ok: false, messa
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, shop, customerId } = await portalContext(request);
-  if (!customerId) return fail("Please sign in again.", 401);
   if (!admin) return fail("Rewards aren't available right now.", 503);
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const str = (k: string) => (typeof body[k] === "string" ? (body[k] as string) : "");
+
+  // A friend claiming a referral offer isn't signed in; everything else needs a customer.
+  if (str("action") === "claim-referral") {
+    try {
+      const referrer = await db.referrerCode.findFirst({ where: { shop, code: str("code").toUpperCase() } });
+      if (!referrer || !portalAllowed(await rewardSettings(shop), referrer.customerEmail)) {
+        return fail("This offer isn't available.");
+      }
+      const referral = await claimReferral(admin, shop, str("code"), str("email"));
+      return Response.json({ ok: true, code: referral.discountCode });
+    } catch (e) {
+      if (e instanceof ReferralError) return fail(e.message);
+      console.error("[proxy/api] claim-referral", e);
+      return fail("Something went wrong — please try again.", 500);
+    }
+  }
+  if (!customerId) return fail("Please sign in again.", 401);
 
   // Loads a submission only if it belongs to this customer and is still editable.
   const ownSubmission = async () => {

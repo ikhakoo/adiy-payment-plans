@@ -1,7 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
 import { eligibleOrders, isTestMode, portalAllowed, rewardSettings, rewardTypes } from "../lib/rewards.server";
-import { esc, money, moneyRange, PORTAL_PATH, portalContext, portalPage } from "../lib/portal.server";
+import { esc, money, moneyRange, PORTAL_PATH, portalContext, portalPage, storefrontHosts } from "../lib/portal.server";
+import { referrerCodeFor } from "../lib/referrals.server";
 import { balance, fmtDate, history } from "../lib/ledger.server";
 
 // Changes on every deploy so browsers fetch the current script instead of a cached one.
@@ -36,6 +37,57 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const inReview = submissions.filter((s) => s.status === "PENDING").length;
   const [bal, events] = await Promise.all([balance(shop, customerId), history(shop, customerId)]);
   const minCashout = Number(settings.minCashout);
+
+  // Referral card: only customers with an eligible order get a link to share.
+  let referralCard = "";
+  if (data?.orders.length) {
+    const [refCode, hosts] = await Promise.all([
+      referrerCodeFor(shop, customerId, data?.name ?? null, data?.email ?? null),
+      storefrontHosts(admin, shop),
+    ]);
+    const link = `https://${hosts[1]}${PORTAL_PATH}/r/${refCode.code}`;
+    const friendAmount = money(String(settings.referralFriendAmount));
+    const reward = money(String(settings.referralReward));
+    const referrals = await db.referral.findMany({
+      where: { shop, referrerCustomerId: customerId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    const statusText = (r: (typeof referrals)[number]) =>
+      ({
+        ISSUED: "Has their code — waiting for an order",
+        ORDERED: r.qualifiesAt
+          ? `Ordered — your ${reward} unlocks ${fmtDate(r.qualifiesAt)}`
+          : `Ordered — your ${reward} unlocks ${settings.referralWaitDays} days after delivery`,
+        QUALIFIED: `${reward} earned`,
+        FLAGGED: "Ordered — being reviewed by our team",
+        REJECTED: `Didn't qualify${r.rejectReason ? ` (${r.rejectReason.toLowerCase()})` : ""}`,
+        EXPIRED: "Code expired unused",
+      })[r.status];
+    const rows = referrals
+      .map(
+        (r) => `<li>${esc(r.friendEmail.replace(/^(.).*(@.*)$/, "$1***$2"))}
+          <span class="badge${r.status === "QUALIFIED" ? " ok" : r.status === "REJECTED" || r.status === "EXPIRED" ? " bad" : ""}" style="float:right">${esc(statusText(r))}</span></li>`,
+      )
+      .join("");
+    referralCard = `
+      <div class="card">
+        <div class="step">Refer a friend — they get ${friendAmount} off, you get ${reward}</div>
+        <div class="card-body">
+          <p>Share your link. Your friend gets ${friendAmount} off their first A-DIY deck (orders of
+            ${money(String(settings.referralMinOrder))}+, Pay in 4/6/8 included). You get ${reward} in rewards once their deck
+            has been delivered for ${settings.referralWaitDays} days.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="rw-ref-link" readonly value="${esc(link)}"
+              style="flex:1;min-width:240px;font:inherit;padding:9px;border:1px solid #ccc;border-radius:4px;background:#fafafa">
+            <button class="btn" id="rw-ref-copy">Copy link</button>
+            <button class="btn secondary" id="rw-ref-share"
+              data-text="${esc(`I love my A-DIY deck — here's ${friendAmount} off yours:`)}">Share</button>
+          </div>
+          ${rows ? `<ul class="files" style="margin-top:16px">${rows}</ul>` : ""}
+        </div>
+      </div>`;
+  }
   const canCashOut = bal.availableCents >= minCashout * 100;
   const cashoutConfig = { api: `${PORTAL_PATH}/api`, portal: PORTAL_PATH, max: bal.availableCents / 100, min: minCashout };
   const historyRows = events
@@ -136,6 +188,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         </div>
       </div>
 
+      ${referralCard}
       ${historyRows ? `<div class="card"><div class="step">History</div><div class="card-body"><ul class="files">${historyRows}</ul></div></div>` : ""}
       <script src="${process.env.SHOPIFY_APP_URL}/rewards-portal.js?v=${SCRIPT_VERSION}" defer></script>
     `),

@@ -2,9 +2,11 @@ import type { ActionFunctionArgs } from "react-router";
 import { unauthenticated } from "../shopify.server";
 import db from "../db.server";
 import { runChargeCycle } from "../lib/charges.server";
+import { runReferralCycle } from "../lib/referrals.server";
 
 // POST /jobs/charges — called by the scheduler (Render cron) with
-// `Authorization: Bearer $CRON_SECRET`. Runs one charge cycle for every installed shop.
+// `Authorization: Bearer $CRON_SECRET`. For every installed shop: one payment-plan charge
+// cycle, then one referral cycle (expire codes, credit referrers whose friend qualified).
 export const action = async ({ request }: ActionFunctionArgs) => {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -21,7 +23,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   for (const { shop } of shops) {
     try {
       const { admin } = await unauthenticated.admin(shop);
-      results[shop] = await runChargeCycle(admin, shop);
+      results[shop] = {
+        charges: await runChargeCycle(admin, shop),
+        referrals: await runReferralCycle(admin, shop),
+      };
     } catch (e) {
       console.error(`[jobs/charges] ${shop}`, e);
       results[shop] = { error: String(e) };

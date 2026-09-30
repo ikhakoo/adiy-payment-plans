@@ -147,17 +147,22 @@ model Settings {
 
 // Rewards-portal settings that aren't per reward type.
 model RewardSettings {
-  shop             String   @id
-  perOrderCap      Decimal  @default(300) @db.Decimal(12, 2) // max reward total per order
-  eligibleDays     Int      @default(21) // fulfilled this many days ago counts as delivered
-  holdDays         Int      @default(7) // approved rewards stay pending this long
-  minCashout       Decimal  @default(25) @db.Decimal(12, 2)
-  agreementText    String? // content-use agreement shown with every submission
-  agreementVersion Int      @default(0) // bumped whenever agreementText changes
+  shop                 String   @id
+  perOrderCap          Decimal  @default(300) @db.Decimal(12, 2) // max reward total per order
+  eligibleDays         Int      @default(21) // fulfilled this many days ago counts as delivered
+  holdDays             Int      @default(7) // approved rewards stay pending this long
+  minCashout           Decimal  @default(25) @db.Decimal(12, 2)
+  referralFriendAmount Decimal  @default(300) @db.Decimal(12, 2) // $ off the friend's first order
+  referralReward       Decimal  @default(300) @db.Decimal(12, 2) // credited to the referrer
+  referralMinOrder     Decimal  @default(2000) @db.Decimal(12, 2)
+  referralWaitDays     Int      @default(30) // after delivery, before the referrer is credited
+  referralCodeDays     Int      @default(60) // friend's code expires after this
+  agreementText        String? // content-use agreement shown with every submission
+  agreementVersion     Int      @default(0) // bumped whenever agreementText changes
   // Soft launch: while off, only these customer emails can use the portal.
-  portalEnabled    Boolean  @default(false)
-  testerEmails     String[] @default([])
-  updatedAt        DateTime @updatedAt
+  portalEnabled        Boolean  @default(false)
+  testerEmails         String[] @default([])
+  updatedAt            DateTime @updatedAt
 }
 
 enum RewardMedia {
@@ -314,4 +319,58 @@ model Cashout {
 
   @@index([shop, status, requestedAt])
   @@index([shop, customerId])
+}
+
+// ------------------------------------------------------------------ referrals
+
+// A customer's shareable referral link code (a-diy.com/apps/rewards/r/<code>).
+model ReferrerCode {
+  id            String     @id @default(cuid())
+  shop          String
+  customerId    String
+  customerName  String?
+  customerEmail String?
+  code          String     @unique
+  createdAt     DateTime   @default(now())
+  referrals     Referral[]
+
+  @@unique([shop, customerId])
+}
+
+enum ReferralStatus {
+  ISSUED // friend claimed a one-time code, hasn't ordered yet
+  ORDERED // friend's order used the code; waiting for delivery + wait period
+  QUALIFIED // referrer credited
+  FLAGGED // failed a fraud check; staff decide
+  REJECTED // order cancelled/refunded, or staff rejected
+  EXPIRED // code expired unused
+}
+
+// One friend claiming one referrer's offer: a single-use discount code tied to their email.
+model Referral {
+  id                 String         @id @default(cuid())
+  shop               String
+  referrerCodeId     String
+  referrerCode       ReferrerCode   @relation(fields: [referrerCodeId], references: [id])
+  referrerCustomerId String
+  friendEmail        String
+  friendCustomerId   String
+  discountCode       String         @unique
+  discountId         String
+  status             ReferralStatus @default(ISSUED)
+  orderId            String?
+  orderName          String?
+  orderedAt          DateTime?
+  qualifiesAt        DateTime?
+  creditId           String?
+  flagReason         String?
+  rejectReason       String?
+  expiresAt          DateTime
+  handledBy          String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  @@index([shop, status])
+  @@index([shop, referrerCustomerId])
+  @@index([shop, friendEmail])
 }
