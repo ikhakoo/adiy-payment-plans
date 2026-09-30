@@ -1,7 +1,16 @@
 import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
 import { eligibleOrders, isTestMode, portalAllowed, rewardSettings, rewardTypes } from "../lib/rewards.server";
-import { esc, money, moneyRange, PORTAL_PATH, portalContext, portalPage, storefrontHosts } from "../lib/portal.server";
+import {
+  esc,
+  money,
+  moneyRange,
+  PORTAL_PATH,
+  portalContext,
+  portalPage,
+  signInUrl,
+  storefrontHosts,
+} from "../lib/portal.server";
 import { referrerCodeFor } from "../lib/referrals.server";
 import { balance, fmtDate, history } from "../lib/ledger.server";
 
@@ -18,7 +27,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         <h1>Deck Rewards</h1>
         <p>Share a video or photos of your A-DIY deck and earn Amazon gift cards.</p>
         <p class="muted">Sign in with the email you ordered with. We'll send you a one-time code — no password needed.</p>
-        <a class="btn" href="{{ routes.account_login_url }}?return_url=${encodeURIComponent(PORTAL_PATH)}">Sign in</a>
+        <a class="btn" href="${signInUrl(PORTAL_PATH)}">Sign in</a>
       `),
     );
   }

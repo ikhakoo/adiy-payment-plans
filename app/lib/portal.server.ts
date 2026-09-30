@@ -6,6 +6,13 @@ import type { AdminGraphql } from "./shopify-ops.server";
 
 export const PORTAL_PATH = "/apps/rewards";
 
+/**
+ * Sign-in link that brings the customer back to `path` afterwards. With new customer accounts,
+ * routes.account_login_url always lands on the orders page; /customer_authentication/login with
+ * a relative return_to comes back to the store page instead.
+ */
+export const signInUrl = (path: string) => `/customer_authentication/login?return_to=${encodeURIComponent(path)}`;
+
 export async function portalContext(request: Request) {
   const { admin, session, liquid } = await authenticate.public.appProxy(request);
   const url = new URL(request.url);

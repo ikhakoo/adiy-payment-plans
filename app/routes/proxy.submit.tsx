@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
 import { eligibleOrders, LIMITS, portalAllowed, rewardSettings, submissionBlocker } from "../lib/rewards.server";
-import { esc, moneyRange, PORTAL_PATH, portalContext, portalPage } from "../lib/portal.server";
+import { esc, moneyRange, PORTAL_PATH, portalContext, portalPage, signInUrl } from "../lib/portal.server";
 
 // Changes on every deploy so browsers fetch the current uploader instead of a cached one.
 const SCRIPT_VERSION = Date.now().toString(36);
@@ -11,7 +11,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, shop, customerId, liquid } = await portalContext(request);
   const back = `<p><a href="${PORTAL_PATH}">← Back to Deck Rewards</a></p>`;
   if (!customerId || !admin) {
-    return liquid(portalPage(`${back}<p>Please sign in to submit content.</p>`));
+    const here = new URL(request.url);
+    const returnTo = `${PORTAL_PATH}/submit${here.search.replace(/[?&](shop|logged_in_customer_id|path_prefix|timestamp|signature)=[^&]*/g, "").replace(/^&/, "?")}`;
+    return liquid(
+      portalPage(`${back}<p>Please sign in to submit content.</p><a class="btn" href="${esc(signInUrl(returnTo))}">Sign in</a>`),
+    );
   }
 
   const url = new URL(request.url);
