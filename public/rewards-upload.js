@@ -185,15 +185,37 @@
       );
   }
 
-  input.addEventListener("change", function () {
+  function addFiles(fileList) {
+    if (!submissionId) return;
     showError("");
-    Array.prototype.forEach.call(input.files, function (file) {
+    Array.prototype.forEach.call(fileList, function (file) {
       var f = { name: file.name, size: file.size, file: file, status: "queued", progress: 0 };
       files.push(f);
       render(f);
       queue = queue.then(function () { return upload(f); }); // one at a time
     });
+  }
+
+  input.addEventListener("change", function () {
+    addFiles(input.files);
     input.value = "";
+  });
+
+  var drop = document.getElementById("rw-drop");
+  ["dragenter", "dragover"].forEach(function (type) {
+    drop.addEventListener(type, function (e) {
+      e.preventDefault();
+      drop.classList.add("over");
+    });
+  });
+  ["dragleave", "drop"].forEach(function (type) {
+    drop.addEventListener(type, function (e) {
+      e.preventDefault();
+      drop.classList.remove("over");
+    });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files);
   });
 
   agree.addEventListener("change", refresh);

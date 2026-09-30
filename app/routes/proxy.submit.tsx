@@ -56,10 +56,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       <div id="rw-upload" data-config="${esc(JSON.stringify(config))}">
         <div class="card"><div class="step">1. Add your ${what}</div><div class="card-body">
-          <label class="drop">
-            <input type="file" id="rw-files" multiple accept="${accept}" style="display:block;margin:0 auto 8px">
-            <span class="muted">Videos up to 2 GB (max ${LIMITS.videosPerSubmission}) · photos up to 25 MB each (max ${LIMITS.photosPerSubmission}).
-              Big videos can take a while on mobile data — keep this page open until they finish.</span>
+          <label class="drop" id="rw-drop" for="rw-files">
+            <input type="file" id="rw-files" multiple accept="${accept}">
+            <span class="btn">Choose ${what}</span>
+            <span class="muted">or drag them here</span>
+            <span class="muted">${
+              type.media === "PHOTO"
+                ? `Up to ${LIMITS.photosPerSubmission} photos, 25 MB each.`
+                : type.media === "VIDEO"
+                  ? `Up to ${LIMITS.videosPerSubmission} videos, 2 GB each.`
+                  : `Up to ${LIMITS.videosPerSubmission} videos (2 GB each) and ${LIMITS.photosPerSubmission} photos (25 MB each).`
+            } Big videos can take a while on mobile data — keep this page open until they finish.</span>
           </label>
           <ul class="files" id="rw-list"></ul>
         </div></div>

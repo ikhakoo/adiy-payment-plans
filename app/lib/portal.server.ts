@@ -75,7 +75,13 @@ export function portalPage(body: string) {
   .rw .bar span { display: block; height: 100%; width: 0; background: #1b3d2f; transition: width .2s; }
   .rw textarea { width: 100%; min-height: 80px; font: inherit; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
   .rw .agree { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; margin: 16px 0; }
-  .rw .drop { border: 2px dashed #c9c9c9; border-radius: 6px; padding: 24px; text-align: center; }
+  .rw .drop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px;
+              border: 2px dashed #c9c9c9; border-radius: 6px; padding: 28px 16px; text-align: center; cursor: pointer;
+              transition: background-color .15s, border-color .15s; }
+  .rw .drop:hover, .rw .drop.over { border-color: #1b3d2f; background: #f5f4f0; }
+  .rw .drop input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .rw .drop:has(input:focus-visible) { outline: 2px solid #1b3d2f; outline-offset: 2px; }
+  .rw .drop .btn { pointer-events: none; }
 </style>
 <div class="rw">${body}</div>`;
 }
