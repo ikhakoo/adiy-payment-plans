@@ -124,10 +124,16 @@ export async function claimReferral(admin: AdminGraphql, shop: string, referrerC
       appliesOncePerCustomer: true,
       // Only this (order-less) customer can use it.
       context: { customers: { add: [friend.id] } },
-      minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: Number(settings.referralMinOrder).toFixed(2) } },
+      // On payment plans checkout's subtotal is only the first payment, so a $ minimum would
+      // block plans. With a deck-kit collection set, eligibility comes from the products instead.
+      ...(settings.referralCollectionId
+        ? {}
+        : { minimumRequirement: { subtotal: { greaterThanOrEqualToSubtotal: Number(settings.referralMinOrder).toFixed(2) } } }),
       customerGets: {
         value: { discountAmount: { amount: amount.toFixed(2), appliesOnEachItem: false } },
-        items: { all: true },
+        items: settings.referralCollectionId
+          ? { collections: { add: [settings.referralCollectionId] } }
+          : { all: true },
         appliesOnOneTimePurchase: true,
         appliesOnSubscription: true, // works with Pay in 4/6/8 (comes off the first payment)
       },

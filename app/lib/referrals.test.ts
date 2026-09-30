@@ -110,6 +110,23 @@ describe("claiming", () => {
   });
 });
 
+describe("with a deck-kit collection", () => {
+  it("limits the code to the collection and drops the $ minimum (plans have a small first-payment subtotal)", async () => {
+    await db.rewardSettings.update({
+      where: { shop },
+      data: { referralCollectionId: "gid://shopify/Collection/9", referralCollectionTitle: "Deck Kits" },
+    });
+    await claimReferral(admin, shop, code, "plans@friend.com");
+    const d = calls.filter((c) => c.op === "CreateReferralDiscount").pop()!.variables.d as {
+      minimumRequirement?: unknown;
+      customerGets: { items: { collections?: { add: string[] }; all?: boolean } };
+    };
+    expect(d.minimumRequirement).toBeUndefined();
+    expect(d.customerGets.items).toEqual({ collections: { add: ["gid://shopify/Collection/9"] } });
+    await db.rewardSettings.update({ where: { shop }, data: { referralCollectionId: null, referralCollectionTitle: null } });
+  });
+});
+
 describe("qualifying", () => {
   it("credits the referrer once delivered + 30 days and paid", async () => {
     orders["gid://shopify/Order/1"] = order({});

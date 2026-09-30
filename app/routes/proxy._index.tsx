@@ -74,8 +74,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       <div class="card">
         <div class="step">Refer a friend — they get ${friendAmount} off, you get ${reward}</div>
         <div class="card-body">
-          <p>Share your link. Your friend gets ${friendAmount} off their first A-DIY deck (orders of
-            ${money(String(settings.referralMinOrder))}+, Pay in 4/6/8 included). You get ${reward} in rewards once their deck
+          <p>Share your link. Your friend gets ${friendAmount} off their first A-DIY deck${
+            settings.referralCollectionId ? "" : ` (orders of ${money(String(settings.referralMinOrder))}+)`
+          } — Pay in 4/6/8 included. You get ${reward} in rewards once their deck
             has been delivered for ${settings.referralWaitDays} days.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input id="rw-ref-link" readonly value="${esc(link)}"

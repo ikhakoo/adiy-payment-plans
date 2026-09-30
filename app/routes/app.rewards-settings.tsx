@@ -38,6 +38,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       referralMinOrder: String(settings.referralMinOrder),
       referralWaitDays: settings.referralWaitDays,
       referralCodeDays: settings.referralCodeDays,
+      referralCollectionTitle: settings.referralCollectionTitle,
       agreementText: settings.agreementText,
       agreementVersion: settings.agreementVersion,
       portalEnabled: settings.portalEnabled,
@@ -72,6 +73,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "disconnect") {
     await db.googleConnection.deleteMany({ where: { shop } });
     return { ok: true, message: "Google Drive disconnected" };
+  }
+
+  if (intent === "referral-collection") {
+    const id = String(form.get("collectionId") ?? "");
+    const title = String(form.get("collectionTitle") ?? "");
+    await db.rewardSettings.update({
+      where: { shop },
+      data: { referralCollectionId: id || null, referralCollectionTitle: id ? title : null },
+    });
+    return {
+      ok: true,
+      message: id ? `Referral codes now apply to "${title}"` : "Referral codes now use the minimum order instead",
+    };
   }
 
   if (intent === "settings") {
@@ -138,6 +152,16 @@ export default function RewardsSettings() {
   const shopify = useAppBridge();
   const [params] = useSearchParams();
   const busy = fetcher.state !== "idle";
+
+  const pickReferralCollection = async () => {
+    const picked = await shopify.resourcePicker({ type: "collection", multiple: false });
+    const c = picked?.[0];
+    if (!c) return;
+    fetcher.submit(
+      { intent: "referral-collection", collectionId: c.id, collectionTitle: (c as { title?: string }).title ?? "" },
+      { method: "POST" },
+    );
+  };
 
   useEffect(() => {
     const data = fetcher.data as { ok: boolean; message?: string; authUrl?: string } | undefined;
@@ -276,7 +300,29 @@ export default function RewardsSettings() {
               <s-number-field name="referralWaitDays" label="Days after delivery before paying the referrer" defaultValue={String(settings.referralWaitDays)} min={0} step={1} />
               <s-number-field name="referralCodeDays" label="Friend's code expires after (days)" defaultValue={String(settings.referralCodeDays)} min={1} step={1} />
             </s-stack>
-            <s-paragraph color="subdued">Changes apply to codes issued from now on.</s-paragraph>
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-text>
+                Friend&apos;s discount applies to:{" "}
+                <s-text type="strong">
+                  {settings.referralCollectionTitle
+                    ? `products in "${settings.referralCollectionTitle}"`
+                    : "any order over the minimum (doesn't work on payment plans)"}
+                </s-text>
+              </s-text>
+              <s-button onClick={pickReferralCollection}>Choose deck-kit collection</s-button>
+              {settings.referralCollectionTitle && (
+                <s-button
+                  variant="tertiary"
+                  onClick={() => fetcher.submit({ intent: "referral-collection", collectionId: "" }, { method: "POST" })}
+                >
+                  Clear
+                </s-button>
+              )}
+            </s-stack>
+            <s-paragraph color="subdued">
+              Choosing a collection of your deck kits is recommended: payment-plan checkouts only show the
+              first payment, so a minimum order amount would block them. Changes apply to codes issued from now on.
+            </s-paragraph>
             <s-text-area
               name="agreementText"
               label={`Content-use agreement (version ${settings.agreementVersion}) — needs legal sign-off`}

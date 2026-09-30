@@ -31,8 +31,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         <div class="step">A gift from ${esc(firstName)}</div>
         <div class="card-body">
           <h1 style="margin-bottom:8px">${amount} off your A-DIY deck</h1>
-          <p>${esc(firstName)} loves their A-DIY deck and wants you to have ${amount} off your first order of
-            ${money(String(settings.referralMinOrder))} or more. It works with Pay in 4, 6 or 8 too.</p>
+          <p>${esc(firstName)} loves their A-DIY deck and wants you to have ${amount} off your first ${
+            settings.referralCollectionId ? "A-DIY deck kit" : `order of ${money(String(settings.referralMinOrder))} or more`
+          }. It works with Pay in 4, 6 or 8 too.</p>
           <label style="display:block;margin:16px 0 8px">Your email<br>
             <input id="rw-friend-email" type="email" autocomplete="email" placeholder="you@example.com"
               style="font:inherit;padding:10px;width:100%;border:1px solid #ccc;border-radius:4px">
