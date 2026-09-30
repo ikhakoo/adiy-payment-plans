@@ -19,6 +19,9 @@ export default function App() {
     <AppProvider apiKey={apiKey}>
       <s-app-nav>
         <s-link href="/app">Payment plans</s-link>
+        <s-link href="/app/submissions">Review queue</s-link>
+        <s-link href="/app/reward-types">Reward types</s-link>
+        <s-link href="/app/rewards-settings">Rewards settings</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

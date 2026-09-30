@@ -142,3 +142,121 @@ model Settings {
   payInFullDiscountId String? // gid://shopify/DiscountAutomaticNode/…
   updatedAt          DateTime @updatedAt
 }
+
+// ------------------------------------------------------------------ rewards portal
+
+// Rewards-portal settings that aren't per reward type.
+model RewardSettings {
+  shop             String   @id
+  perOrderCap      Decimal  @default(300) @db.Decimal(12, 2) // max reward total per order
+  eligibleDays     Int      @default(21) // fulfilled this many days ago counts as delivered
+  holdDays         Int      @default(7) // approved rewards stay pending this long
+  agreementText    String? // content-use agreement shown with every submission
+  agreementVersion Int      @default(0) // bumped whenever agreementText changes
+  // Soft launch: while off, only these customer emails can use the portal.
+  portalEnabled    Boolean  @default(false)
+  testerEmails     String[] @default([])
+  updatedAt        DateTime @updatedAt
+}
+
+enum RewardMedia {
+  VIDEO
+  PHOTO
+  ANY
+}
+
+// Editable list of things customers can submit (e.g. "Full video walkthrough — $200").
+model RewardType {
+  id            String       @id @default(cuid())
+  shop          String
+  name          String
+  description   String // shown to customers: what we're looking for
+  media         RewardMedia  @default(ANY)
+  minAmount     Decimal      @db.Decimal(12, 2)
+  maxAmount     Decimal      @db.Decimal(12, 2) // equal to minAmount for a fixed reward
+  perOrderLimit Int          @default(1)
+  active        Boolean      @default(true)
+  position      Int          @default(0)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  submissions   Submission[]
+
+  @@index([shop, active, position])
+}
+
+enum SubmissionStatus {
+  DRAFT // created, files uploading, not sent for review yet
+  PENDING // waiting for staff
+  NEEDS_CHANGES // staff asked for more/different content
+  APPROVED
+  REJECTED
+}
+
+model Submission {
+  id               String            @id @default(cuid())
+  shop             String
+  customerId       String // gid://shopify/Customer/…
+  customerName     String?
+  customerEmail    String?
+  orderId          String // gid://shopify/Order/…
+  orderName        String
+  rewardTypeId     String
+  rewardType       RewardType        @relation(fields: [rewardTypeId], references: [id])
+  status           SubmissionStatus  @default(DRAFT)
+  note             String?
+  agreementVersion Int?
+  agreedAt         DateTime?
+  driveFolderId    String?
+  amount           Decimal?          @db.Decimal(12, 2) // set on approval
+  reviewMessage    String? // needs-changes / rejection message shown to the customer
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  submittedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  files            SubmissionFile[]
+  events           SubmissionEvent[]
+
+  @@index([shop, status, submittedAt])
+  @@index([shop, customerId])
+  @@index([orderId, rewardTypeId])
+}
+
+model SubmissionFile {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  name         String
+  mimeType     String
+  size         BigInt
+  status       String     @default("UPLOADING") // UPLOADING | UPLOADED | REMOVED
+  driveFileId  String?
+  createdAt    DateTime   @default(now())
+  uploadedAt   DateTime?
+
+  @@index([submissionId, status])
+}
+
+model SubmissionEvent {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  type         String // created, submitted, approved, needs_changes, rejected, file_uploaded, …
+  actor        String     @default("customer") // "customer", "system" or a staff id
+  message      String?
+  createdAt    DateTime   @default(now())
+
+  @@index([submissionId, createdAt])
+}
+
+// The Google account connected via "Connect Google Drive" and the Shared Drive uploads go to.
+model GoogleConnection {
+  shop             String   @id
+  email            String
+  refreshToken     String // AES-GCM encrypted (see app/lib/crypto.server.ts)
+  sharedDriveId    String?
+  sharedDriveName  String?
+  approvedFolderId String? // "Approved" folder at the drive root
+  connectedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

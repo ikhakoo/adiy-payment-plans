@@ -34,6 +34,12 @@ api_version = "2026-07"
   uri = "/webhooks/compliance"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
+# Customer rewards portal: a-diy.com/apps/rewards → /proxy (see app/routes/proxy.*)
+[app_proxy]
+url = "https://adiy-payment-plans.onrender.com/proxy"
+subpath = "rewards"
+prefix = "apps"
+
 [auth]
 redirect_urls = [ "https://adiy-payment-plans.onrender.com/api/auth" ]
 
