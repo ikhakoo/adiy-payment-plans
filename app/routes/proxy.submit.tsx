@@ -69,7 +69,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 : type.media === "VIDEO"
                   ? `Up to ${LIMITS.videosPerSubmission} videos, 2 GB each.`
                   : `Up to ${LIMITS.videosPerSubmission} videos (2 GB each) and ${LIMITS.photosPerSubmission} photos (25 MB each).`
-            } Big videos can take a while on mobile data — keep this page open until they finish.</span>
+            }${type.media === "PHOTO" ? "" : " Big videos can take a while on mobile data — keep this page open until they finish."}</span>
           </label>
           <ul class="files" id="rw-list"></ul>
         </div></div>
