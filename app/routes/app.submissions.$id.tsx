@@ -6,7 +6,8 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import { ensureFolder, moveItem } from "../lib/google.server";
-import { approvalHeadroom, logSubmission } from "../lib/rewards.server";
+import { approvalHeadroom, logSubmission, rewardSettings } from "../lib/rewards.server";
+import { creditSubmission } from "../lib/ledger.server";
 import { formatMoney } from "../lib/format";
 import { submissionLabel, submissionTone } from "./app.submissions._index";
 
@@ -102,6 +103,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       },
     });
     await logSubmission(s.id, "approved", `${formatMoney(amount)}${message ? ` — ${message}` : ""}`, actor);
+    const { holdDays } = await rewardSettings(shop);
+    await creditSubmission(s, amount, holdDays, actor);
 
     // Move the files into Approved/ for the marketing team; approval stands even if this fails.
     const conn = await db.googleConnection.findUnique({ where: { shop } });

@@ -20,6 +20,7 @@ export default function App() {
       <s-app-nav>
         <s-link href="/app">Payment plans</s-link>
         <s-link href="/app/submissions">Review queue</s-link>
+        <s-link href="/app/cashouts">Cash-outs</s-link>
         <s-link href="/app/reward-types">Reward types</s-link>
         <s-link href="/app/rewards-settings">Rewards settings</s-link>
       </s-app-nav>

@@ -32,6 +32,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       perOrderCap: String(settings.perOrderCap),
       eligibleDays: settings.eligibleDays,
       holdDays: settings.holdDays,
+      minCashout: String(settings.minCashout),
       agreementText: settings.agreementText,
       agreementVersion: settings.agreementVersion,
       portalEnabled: settings.portalEnabled,
@@ -73,8 +74,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const perOrderCap = Number(form.get("perOrderCap"));
     const eligibleDays = Number(form.get("eligibleDays"));
     const holdDays = Number(form.get("holdDays"));
+    const minCashout = Number(form.get("minCashout"));
     const agreementText = String(form.get("agreementText") ?? "").trim();
-    if (!(perOrderCap > 0) || !(eligibleDays >= 0) || !(holdDays >= 0) || !agreementText) {
+    if (!(perOrderCap > 0) || !(eligibleDays >= 0) || !(holdDays >= 0) || !(minCashout >= 1) || !agreementText) {
       return { ok: false, message: "Check the values — all fields are required" };
     }
     const portalEnabled = form.get("portalEnabled") === "on";
@@ -89,6 +91,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         perOrderCap: perOrderCap.toFixed(2),
         eligibleDays,
         holdDays,
+        minCashout: minCashout.toFixed(2),
         agreementText,
         portalEnabled,
         testerEmails,
@@ -222,6 +225,13 @@ export default function RewardsSettings() {
                 label="Days after fulfillment an undelivered order counts as delivered"
                 defaultValue={String(settings.eligibleDays)}
                 min={0}
+                step={1}
+              />
+              <s-number-field
+                name="minCashout"
+                label="Minimum cash-out ($)"
+                defaultValue={settings.minCashout}
+                min={1}
                 step={1}
               />
               <s-number-field

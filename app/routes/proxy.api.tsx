@@ -12,6 +12,7 @@ import {
   submissionFolder,
 } from "../lib/rewards.server";
 import { portalContext, storefrontHosts } from "../lib/portal.server";
+import { CashoutError, requestCashout } from "../lib/ledger.server";
 
 // POST /apps/rewards/api — JSON actions for the upload page. Every action is scoped to the
 // signed-in customer (from Shopify's signed proxy request), never to IDs the browser sends.
@@ -152,6 +153,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           },
         });
         await logSubmission(s.id, s.status === "NEEDS_CHANGES" ? "resubmitted" : "submitted");
+        return Response.json({ ok: true });
+      }
+
+      case "cashout": {
+        const settings = await rewardSettings(shop);
+        const customer = await eligibleOrders(admin, customerId, settings.eligibleDays, {
+          testMode: !settings.portalEnabled,
+        });
+        if (!portalAllowed(settings, customer?.email)) return fail("Rewards are coming soon.", 403);
+        try {
+          await requestCashout({
+            shop,
+            customerId,
+            customerName: customer?.name ?? null,
+            email: str("email"),
+            amount: Number(body.amount),
+            minCashout: Number(settings.minCashout),
+          });
+        } catch (e) {
+          if (e instanceof CashoutError) return fail(e.message);
+          throw e;
+        }
         return Response.json({ ok: true });
       }
 
