@@ -92,7 +92,7 @@ function addressLines(a: Address) {
   ]
     .filter(Boolean)
     .map((l) => esc(l))
-    .join("<br>");
+    .join("<br>") || `<span class="muted">Incomplete address. Edit it to add the details.</span>`;
 }
 
 const field = (label: string, name: string, value: string | null | undefined, attrs = "") =>

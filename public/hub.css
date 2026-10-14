@@ -110,7 +110,11 @@
 .hub .banner > div { flex: 1; }
 .hub .banner > .icon-tile { flex: none; }
 .hub .banner .btn.light { background: #fff; border-color: #fff; }
-@media (max-width: 600px) { .hub .banner { flex-wrap: wrap; } }
+@media (max-width: 600px) {
+  .hub .banner { flex-wrap: wrap; }
+  .hub .banner > div:not(.icon-tile) { flex: 1 1 200px; }
+  .hub .banner > .btn, .hub .banner > .btn-row { width: 100%; }
+}
 
 .hub .notice { background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: var(--r-sm); padding: 12px 16px; margin: 0 0 16px; font-size: 14px; }
 .hub .notice.warn { border-left-color: var(--gold); }
