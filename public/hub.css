@@ -22,6 +22,8 @@
   -webkit-font-smoothing: antialiased;
 }
 .hub *, .hub *::before, .hub *::after { box-sizing: border-box; }
+/* The theme hides empty divs (div:empty); our spacers and progress bars are empty divs. */
+.hub div:empty { display: block; }
 .hub a { color: inherit; }
 .hub h1, .hub h2, .hub h3 { font-family: inherit; color: var(--ink); letter-spacing: -0.01em; margin: 0; }
 .hub p { margin: 0 0 12px; }
@@ -96,6 +98,7 @@
 .hub .banner .h3 { margin: 0; }
 .hub .banner p { margin: 0; font-size: 13px; color: var(--muted); }
 .hub .banner > div { flex: 1; }
+.hub .banner > .icon-tile { flex: none; }
 @media (max-width: 600px) { .hub .banner { flex-wrap: wrap; } }
 
 .hub .notice { background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--green); border-radius: var(--r-sm); padding: 12px 16px; margin: 0 0 16px; font-size: 14px; }
