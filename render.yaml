@@ -32,6 +32,13 @@ services:
         sync: false
       - key: SHOPIFY_APP_URL # e.g. https://plans.a-diy.com
         sync: false
+      # Gorgias helpdesk for Help & Support (Settings → REST API in Gorgias).
+      - key: GORGIAS_DOMAIN # subdomain only, e.g. "adiy" for adiy.gorgias.com
+        sync: false
+      - key: GORGIAS_EMAIL
+        sync: false
+      - key: GORGIAS_API_KEY
+        sync: false
       - key: SCOPES
         value: write_products,read_purchase_options,write_purchase_options,read_own_subscription_contracts,write_own_subscription_contracts,read_customer_payment_methods,read_orders,write_orders,read_all_orders,read_customers,write_customers,read_inventory,write_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,write_draft_orders,read_discounts,write_discounts
 

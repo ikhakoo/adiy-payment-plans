@@ -1,37 +1,29 @@
 import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
-import { eligibleOrders, LIMITS, portalAllowed, rewardSettings, submissionBlocker } from "../lib/rewards.server";
-import { esc, moneyRange, PORTAL_PATH, portalContext, portalPage, signInUrl } from "../lib/portal.server";
+import { LIMITS, submissionBlocker } from "../lib/rewards.server";
+import { esc, moneyRange } from "../lib/portal.server";
+import { asset, hubContext, renderHub } from "../lib/hub.server";
 
-// Changes on every deploy so browsers fetch the current uploader instead of a cached one.
-const SCRIPT_VERSION = Date.now().toString(36);
-
-// GET /apps/rewards/submit?order=<id>&type=<rewardTypeId> — upload page for one reward.
+// GET /apps/hub/submit?order=<id>&type=<rewardTypeId> — upload page for one reward.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, shop, customerId, liquid } = await portalContext(request);
-  const back = `<p><a href="${PORTAL_PATH}">← Back to Deck Rewards</a></p>`;
-  if (!customerId || !admin) {
-    const here = new URL(request.url);
-    const returnTo = `${PORTAL_PATH}/submit${here.search.replace(/[?&](shop|logged_in_customer_id|path_prefix|timestamp|signature)=[^&]*/g, "").replace(/^&/, "?")}`;
-    return liquid(
-      portalPage(`${back}<p>Please sign in to submit content.</p><a class="btn" href="${esc(signInUrl(returnTo))}">Sign in</a>`),
-    );
-  }
+  const { page, ctx } = await hubContext(request);
+  if (page) return page;
+  const { shop, customerId } = ctx;
+  const show = (body: string) => renderHub(ctx, "rewards", "Rewards", body);
+  const back = `<p><a class="btn link" href="${ctx.url("/rewards")}">← Back to rewards</a></p>`;
 
   const url = new URL(request.url);
   const numericOrderId = (url.searchParams.get("order") ?? "").replace(/\D/g, "");
   const orderId = `gid://shopify/Order/${numericOrderId}`;
-  const settings = await rewardSettings(shop);
-  const [data, type, conn] = await Promise.all([
-    eligibleOrders(admin, customerId, settings.eligibleDays, { testMode: !settings.portalEnabled }),
+  const settings = ctx.settings;
+  const [type, conn] = await Promise.all([
     db.rewardType.findFirst({ where: { id: url.searchParams.get("type") ?? "", shop } }),
     db.googleConnection.findUnique({ where: { shop } }),
   ]);
-  if (!portalAllowed(settings, data?.email)) return liquid(portalPage(`<h1>Deck Rewards</h1><p>Coming soon — share your deck and earn Amazon gift cards.</p>`));
-  const order = data?.orders.find((o) => o.id === orderId);
-  if (!order || !type) return liquid(portalPage(`${back}<p>This order isn't eligible for rewards.</p>`));
+  const order = ctx.rewardOrders.find((o) => o.id === orderId);
+  if (!order || !type) return show(`${back}<div class="notice warn">This order isn't eligible for rewards.</div>`);
   if (!conn?.sharedDriveId) {
-    return liquid(portalPage(`${back}<div class="notice">Uploads are paused for a moment — please check back soon.</div>`));
+    return show(`${back}<div class="notice warn">Uploads are paused for a moment. Please check back soon.</div>`);
   }
 
   const open = await db.submission.findFirst({
@@ -40,29 +32,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   });
   if (!open) {
     const blocked = await submissionBlocker(shop, orderId, type);
-    if (blocked) return liquid(portalPage(`${back}<div class="notice">${esc(blocked)}</div>`));
+    if (blocked) return show(`${back}<div class="notice warn">${esc(blocked)}</div>`);
   }
 
   const accept = type.media === "VIDEO" ? "video/*" : type.media === "PHOTO" ? "image/*,.heic,.heif" : "video/*,image/*,.heic,.heif";
   const what = type.media === "VIDEO" ? "videos" : type.media === "PHOTO" ? "photos" : "videos or photos";
   const config = {
-    api: `${PORTAL_PATH}/api`,
-    portal: PORTAL_PATH,
+    api: ctx.url("/api"),
+    portal: ctx.url("/rewards/submissions"),
     orderId: numericOrderId,
     typeId: type.id,
   };
 
-  return liquid(
-    portalPage(`
+  return show(`
       ${back}
-      <h1>${esc(type.name)}</h1>
-      <p><span class="badge ok">${moneyRange(String(type.minAmount), String(type.maxAmount))} Amazon gift card</span>
-         <span class="muted">· Order ${esc(order.name)}</span></p>
-      <p>${esc(type.description)}</p>
-      ${open?.status === "NEEDS_CHANGES" ? `<div class="notice"><strong>Our team asked for changes:</strong> ${esc(open.reviewMessage)}</div>` : ""}
+      <div class="page-head">
+        <div class="eyebrow">Order ${esc(order.name)}</div>
+        <h1 class="h1">${esc(type.name)}</h1>
+        <p><span class="pill mint">${moneyRange(String(type.minAmount), String(type.maxAmount))} Amazon gift card</span></p>
+        <p class="lede">${esc(type.description)}</p>
+      </div>
+      ${open?.status === "NEEDS_CHANGES" ? `<div class="notice warn"><strong>Our team asked for changes:</strong> ${esc(open.reviewMessage)}</div>` : ""}
 
       <div id="rw-upload" data-config="${esc(JSON.stringify(config))}">
-        <div class="card"><div class="step">1. Add your ${what}</div><div class="card-body">
+        <div class="card"><div class="step-label">1. Add your ${what}</div>
           <label class="drop" id="rw-drop" for="rw-files">
             <input type="file" id="rw-files" multiple accept="${accept}">
             <span class="btn">Choose ${what}</span>
@@ -76,20 +69,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             }${type.media === "PHOTO" ? "" : " Big videos can take a while on mobile data — keep this page open until they finish."}</span>
           </label>
           <ul class="files" id="rw-list"></ul>
-        </div></div>
+        </div>
 
-        <div class="card"><div class="step">2. Anything you'd like to add? (optional)</div><div class="card-body">
+        <div class="card"><div class="step-label">2. Anything you'd like to add? (optional)</div>
           <textarea id="rw-note" maxlength="2000" placeholder="e.g. We built it over a weekend with two people.">${esc(open?.note ?? "")}</textarea>
-        </div></div>
+        </div>
 
-        <div class="card"><div class="step">3. Submit</div><div class="card-body">
+        <div class="card"><div class="step-label">3. Submit</div>
           <p class="muted">${esc(settings.agreementText)}</p>
           <label class="agree"><input type="checkbox" id="rw-agree"> <span>I agree to the terms above.</span></label>
-          <p id="rw-error" class="notice" style="display:none"></p>
+          <p id="rw-error" class="notice warn" style="display:none"></p>
           <button class="btn" id="rw-submit" disabled>Submit for review</button>
-        </div></div>
+        </div>
       </div>
-      <script src="${process.env.SHOPIFY_APP_URL}/rewards-upload.js?v=${SCRIPT_VERSION}" defer></script>
-    `),
-  );
+      <script src="${asset("rewards-upload.js")}" defer></script>
+    `);
 };

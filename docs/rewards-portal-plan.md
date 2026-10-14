@@ -11,7 +11,7 @@ Decisions below were agreed with Imran on 2026-09-29.
 ## 1. Login
 - **Shopify new customer accounts** (switched on 2026-09-29): customers sign in with an emailed
   6-digit code, with no passwords. Anyone who has ordered with that email can sign in, including guest orders.
-- Portal at **`a-diy.com/apps/rewards`** via a Shopify **App Proxy**, so it renders on the store's
+- Portal at **`a-diy.com/apps/hub`** (originally `/apps/rewards`; renamed when the portal became the customer hub) via a Shopify **App Proxy**, so it renders on the store's
   domain. Shopify passes the signed-in customer's ID with each request (`logged_in_customer_id`,
   HMAC-signed), so the app never handles passwords or codes. Signed-out visitors are sent to the
   Shopify sign-in and returned to the portal.

@@ -327,7 +327,7 @@ model Cashout {
 
 // ------------------------------------------------------------------ referrals
 
-// A customer's shareable referral link code (a-diy.com/apps/rewards/r/<code>).
+// A customer's shareable referral link code (a-diy.com/apps/hub/r/<code>).
 model ReferrerCode {
   id            String     @id @default(cuid())
   shop          String
@@ -377,4 +377,59 @@ model Referral {
   @@index([shop, status])
   @@index([shop, referrerCustomerId])
   @@index([shop, friendEmail])
+}
+
+// ------------------------------------------------------------------ hub: build resources
+
+enum ResourceSection {
+  HERO // the hero card's "Download guide" button
+  BEFORE // Before you build
+  BUILD // Assembly guides
+  AFTER // After your build: warranty & care
+}
+
+enum ResourceKind {
+  PDF
+  VIDEO
+  CHECKLIST
+  GUIDE
+  LINK
+  APP_3D // 3D instructional app
+}
+
+// A file or link shown on Build Resources for customers who bought a deck-kit product.
+model BuildResource {
+  id           String          @id @default(cuid())
+  shop         String
+  productId    String // gid://shopify/Product/…
+  productTitle String?
+  variantId    String? // null = every size of the product
+  variantTitle String?
+  section      ResourceSection
+  kind         ResourceKind
+  title        String
+  description  String?
+  url          String
+  meta         String? // e.g. "24 pgs"
+  position     Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([shop, productId])
+}
+
+// Spec pills on Build Resources for a deck-kit product, or one size of it (null variantId = all sizes).
+model KitSpec {
+  id           String   @id @default(cuid())
+  shop         String
+  productId    String
+  productTitle String?
+  variantId    String?
+  variantTitle String?
+  specLabel    String? // "10′ × 12′ Freestanding"
+  buildTime    String? // "1.5 - 2 Days (2 adults)"
+  deckSize     String? // "120 sq ft"
+  updatedAt    DateTime @updatedAt
+
+  @@index([shop, productId])
 }

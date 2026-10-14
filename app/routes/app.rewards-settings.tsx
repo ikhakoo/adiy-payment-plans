@@ -253,7 +253,7 @@ export default function RewardsSettings() {
             <s-checkbox
               name="portalEnabled"
               label="Portal is live for all customers"
-              details="While off, only the tester emails below can use a-diy.com/apps/rewards; everyone else sees “coming soon”."
+              details="While off, only the tester emails below can use a-diy.com/apps/hub; everyone else sees “coming soon”."
               defaultChecked={settings.portalEnabled}
             />
             <s-text-area

@@ -15,7 +15,7 @@ import { portalContext, storefrontHosts } from "../lib/portal.server";
 import { CashoutError, requestCashout } from "../lib/ledger.server";
 import { claimReferral, ReferralError } from "../lib/referrals.server";
 
-// POST /apps/rewards/api — JSON actions for the upload page. Every action is scoped to the
+// POST /apps/hub/api — JSON actions for the upload page. Every action is scoped to the
 // signed-in customer (from Shopify's signed proxy request), never to IDs the browser sends.
 const fail = (message: string, status = 400) => Response.json({ ok: false, message }, { status });
 

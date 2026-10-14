@@ -9,7 +9,7 @@ embedded = true
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # read_all_orders, read/write_own_subscription_contracts and read_customer_payment_methods are
 # protected scopes: they need approval in the Partner Dashboard before they work on the live store.
-scopes = "write_products,read_purchase_options,write_purchase_options,read_own_subscription_contracts,write_own_subscription_contracts,read_customer_payment_methods,read_orders,write_orders,read_all_orders,read_customers,write_customers,read_inventory,write_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,write_draft_orders,read_discounts,write_discounts"
+scopes = "write_products,read_purchase_options,write_purchase_options,read_own_subscription_contracts,write_own_subscription_contracts,read_customer_payment_methods,read_orders,write_orders,read_all_orders,read_customers,write_customers,read_inventory,write_inventory,read_merchant_managed_fulfillment_orders,write_merchant_managed_fulfillment_orders,write_draft_orders,read_discounts,write_discounts,write_files"
 
 [webhooks]
 api_version = "2026-07"
@@ -34,10 +34,10 @@ api_version = "2026-07"
   uri = "/webhooks/compliance"
   compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 
-# Customer rewards portal: a-diy.com/apps/rewards → /proxy (see app/routes/proxy.*)
+# Customer hub: a-diy.com/apps/hub → /proxy (see app/routes/proxy.*)
 [app_proxy]
 url = "https://adiy-payment-plans.onrender.com/proxy"
-subpath = "rewards"
+subpath = "hub"
 prefix = "apps"
 
 [auth]

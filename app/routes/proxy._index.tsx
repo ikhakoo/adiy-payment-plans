@@ -1,206 +1,129 @@
 import type { LoaderFunctionArgs } from "react-router";
-import db from "../db.server";
-import { eligibleOrders, isTestMode, portalAllowed, rewardSettings, rewardTypes } from "../lib/rewards.server";
-import {
-  esc,
-  money,
-  moneyRange,
-  PORTAL_PATH,
-  portalContext,
-  portalPage,
-  signInUrl,
-  storefrontHosts,
-} from "../lib/portal.server";
-import { referrerCodeFor } from "../lib/referrals.server";
-import { balance, fmtDate, history } from "../lib/ledger.server";
+import { rewardTypes } from "../lib/rewards.server";
+import { esc, money } from "../lib/portal.server";
+import { ARROW, hubContext, icon, renderHub } from "../lib/hub.server";
+import { sentSubmissions } from "../lib/hub-rewards.server";
+import { mainLine, orderQuery, orderSwitcher, selectedOrder } from "../lib/orders.server";
+import { carrierTrackingUrl, deckProgress } from "../lib/tracking";
+import { progressStrip, STEP_COPY } from "../lib/tracking-view.server";
 
-// Changes on every deploy so browsers fetch the current script instead of a cached one.
-const SCRIPT_VERSION = Date.now().toString(36);
-
-// GET /apps/rewards — the customer's rewards home.
+// GET /apps/hub — Overview: the selected order at a glance, with the next thing to do.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, shop, customerId, liquid } = await portalContext(request);
+  const { page, ctx } = await hubContext(request);
+  if (page) return page;
 
-  if (!customerId) {
-    return liquid(
-      portalPage(`
-        <h1>Deck Rewards</h1>
-        <p>Share a video or photos of your A-DIY deck and earn Amazon gift cards.</p>
-        <p class="muted">Sign in with the email you ordered with. We'll send you a one-time code — no password needed.</p>
-        <a class="btn" href="${signInUrl(PORTAL_PATH)}">Sign in</a>
-      `),
-    );
-  }
-  if (!admin) return liquid(portalPage(`<h1>Deck Rewards</h1><p>Rewards aren't available right now.</p>`));
-
-  const settings = await rewardSettings(shop);
-  const [data, types, submissions, conn] = await Promise.all([
-    eligibleOrders(admin, customerId, settings.eligibleDays, { testMode: !settings.portalEnabled }),
-    rewardTypes(shop, { activeOnly: true }),
-    db.submission.findMany({ where: { shop, customerId, status: { not: "DRAFT" } } }),
-    db.googleConnection.findUnique({ where: { shop } }),
+  const [{ orders, order }, types, submissions] = await Promise.all([
+    selectedOrder(ctx, request),
+    rewardTypes(ctx.shop, { activeOnly: true }),
+    sentSubmissions(ctx),
   ]);
-  if (!portalAllowed(settings, data?.email)) return liquid(portalPage(`<h1>Deck Rewards</h1><p>Coming soon — share your deck and earn Amazon gift cards.</p>`));
-  const uploadsOpen = Boolean(conn?.sharedDriveId);
+  const topReward = types.reduce((max, t) => Math.max(max, Number(t.maxAmount)), 0);
+  const possible = types.length * Math.max(1, ctx.rewardOrders.length);
+  const sent = submissions.filter((s) => s.status !== "REJECTED").length;
+  const friendAmount = money(String(ctx.settings.referralFriendAmount));
+  const reward = money(String(ctx.settings.referralReward));
+  const p = order ? deckProgress(order) : null;
+  const line = order ? mainLine(order) : null;
+  const q = orderQuery(order);
+  const reportIssue = order ? ctx.url(`/support?topic=parts&order=${order.numericId}`) : ctx.url("/support");
 
-  const inReview = submissions.filter((s) => s.status === "PENDING").length;
-  const [bal, events] = await Promise.all([balance(shop, customerId), history(shop, customerId)]);
-  const minCashout = Number(settings.minCashout);
-
-  // Referral card: only customers with an eligible order get a link to share.
-  let referralCard = "";
-  if (data?.orders.length) {
-    const [refCode, hosts] = await Promise.all([
-      referrerCodeFor(shop, customerId, data?.name ?? null, data?.email ?? null),
-      storefrontHosts(admin, shop),
-    ]);
-    const link = `https://${hosts[1]}${PORTAL_PATH}/r/${refCode.code}`;
-    const friendAmount = money(String(settings.referralFriendAmount));
-    const reward = money(String(settings.referralReward));
-    const referrals = await db.referral.findMany({
-      where: { shop, referrerCustomerId: customerId },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-    const statusText = (r: (typeof referrals)[number]) =>
-      ({
-        ISSUED: "Has their code — waiting for an order",
-        ORDERED: r.qualifiesAt
-          ? `Ordered — your ${reward} unlocks ${fmtDate(r.qualifiesAt)}`
-          : `Ordered — your ${reward} unlocks ${settings.referralWaitDays} days after delivery`,
-        QUALIFIED: `${reward} earned`,
-        FLAGGED: "Ordered — being reviewed by our team",
-        REJECTED: `Didn't qualify${r.rejectReason ? ` (${r.rejectReason.toLowerCase()})` : ""}`,
-        EXPIRED: "Code expired unused",
-      })[r.status];
-    const rows = referrals
-      .map(
-        (r) => `<li>${esc(r.friendEmail.replace(/^(.).*(@.*)$/, "$1***$2"))}
-          <span class="badge${r.status === "QUALIFIED" ? " ok" : r.status === "REJECTED" || r.status === "EXPIRED" ? " bad" : ""}" style="float:right">${esc(statusText(r))}</span></li>`,
-      )
-      .join("");
-    referralCard = `
-      <div class="card">
-        <div class="step">Refer a friend — they get ${friendAmount} off, you get ${reward}</div>
-        <div class="card-body">
-          <p>Share your link. Your friend gets ${friendAmount} off their first A-DIY deck${
-            settings.referralCollectionId ? "" : ` (orders of ${money(String(settings.referralMinOrder))}+)`
-          } — Pay in 4/6/8 included. You get ${reward} in rewards once their deck
-            has been delivered for ${settings.referralWaitDays} days.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input id="rw-ref-link" readonly value="${esc(link)}"
-              style="flex:1;min-width:240px;font:inherit;padding:9px;border:1px solid #ccc;border-radius:4px;background:#fafafa">
-            <button class="btn" id="rw-ref-copy">Copy link</button>
-            <button class="btn secondary" id="rw-ref-share"
-              data-text="${esc(`I love my A-DIY deck — here's ${friendAmount} off yours:`)}">Share</button>
-          </div>
-          ${rows ? `<ul class="files" style="margin-top:16px">${rows}</ul>` : ""}
-        </div>
-      </div>`;
-  }
-  const canCashOut = bal.availableCents >= minCashout * 100;
-  const cashoutConfig = { api: `${PORTAL_PATH}/api`, portal: PORTAL_PATH, max: bal.availableCents / 100, min: minCashout };
-  const historyRows = events
-    .map(
-      (e) => `<li><span>${fmtDate(e.at)} · ${esc(e.label)}</span>
-        <strong style="float:right">${e.amount < 0 ? "−" : "+"}${money(Math.abs(e.amount))}</strong>
-        <div class="muted">${esc(e.status)}</div></li>`,
-    )
-    .join("");
-
-  const orders = data?.orders ?? [];
-  const justSubmitted = new URL(request.url).searchParams.has("submitted");
-  const justCashedOut = new URL(request.url).searchParams.has("cashout");
-  const orderCards = orders
-    .map((o) => {
-      const numericId = o.id.split("/").pop();
-      const cards = types
-        .map((t) => {
-          const mine = submissions
-            .filter((s) => s.orderId === o.id && s.rewardTypeId === t.id)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-          const latest = mine[0];
-          const used = mine.filter((s) => s.status !== "REJECTED").length;
-          const submitUrl = `${PORTAL_PATH}/submit?order=${numericId}&type=${t.id}`;
-          let footer: string;
-          if (latest?.status === "NEEDS_CHANGES") {
-            footer = `<span class="badge warn">Changes requested</span>
-              <p class="muted">${esc(latest.reviewMessage)}</p>
-              <a class="btn" href="${submitUrl}">Update submission</a>`;
-          } else if (latest?.status === "PENDING") {
-            footer = `<span class="badge">In review</span>`;
-          } else if (latest?.status === "APPROVED" && used >= t.perOrderLimit) {
-            footer = `<span class="badge ok">Approved · ${money(String(latest.amount ?? 0))}</span>`;
-          } else if (used >= t.perOrderLimit) {
-            footer = `<span class="badge">Submitted</span>`;
-          } else {
-            const rejected = latest?.status === "REJECTED"
-              ? `<span class="badge bad">Not approved</span><p class="muted">${esc(latest.reviewMessage)}</p>`
-              : "";
-            footer = `${rejected}<a class="btn${uploadsOpen ? "" : " disabled"}" href="${submitUrl}">${latest ? "Try again" : "Submit"}</a>`;
-          }
-          return `<div class="reward">
-              <strong>${esc(t.name)}</strong>
-              <span class="amount">${moneyRange(String(t.minAmount), String(t.maxAmount))}</span>
-              <span class="muted">${esc(t.description)}</span>
-              ${footer}
-            </div>`;
-        })
-        .join("");
-      return `<div class="card">
-          <div class="step">Order ${esc(o.name)}</div>
-          <div class="card-body">
-            <div class="order">
-              ${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : ""}
-              <div><strong>${esc(o.title)}</strong>
-                <p class="muted">${o.deliveredAt ? `Delivered ${new Date(o.deliveredAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}</p></div>
-            </div>
-            <div class="rewards">${cards}</div>
+  // The hero says what to do next for where the deck is.
+  const hero = !order || !p
+    ? `<div class="hero">
+        <div class="eyebrow">Share your build</div>
+        <h2 class="h1">Show off your deck.<br>Earn up to ${money(topReward)}.</h2>
+        <p>Upload a video walkthrough, a short video review or a photo set of your finished deck and earn Amazon gift cards.</p>
+        <a class="btn white" href="${ctx.url("/rewards")}">Explore rewards ${ARROW}</a>
+      </div>`
+    : p.step === "delivered"
+      ? `<div class="hero">
+          <div class="eyebrow">Your next step · Assembly</div>
+          <h2 class="h1">Your deck has arrived.<br>Let's build.</h2>
+          <p>Everything you need to build your deck is right here. Find your installation guide, footing plan, and interactive 3D instructions below.</p>
+          <a class="btn white" href="${ctx.url(`/resources${q}`)}">View my build resources ${ARROW}</a>
+        </div>`
+      : `<div class="hero">
+          <div class="eyebrow">Your next step · ${p.step === "shipped" ? "Delivery" : "Get ready"}</div>
+          <h2 class="h1">${STEP_COPY[p.step].title}</h2>
+          <p>${STEP_COPY[p.step].text}${p.step === "shipped" ? "" : " While you wait, look through your build resources so you're ready on delivery day."}</p>
+          <div class="btn-row">
+            <a class="btn white" href="${ctx.url(`/track${q}`)}">Track my deck ${ARROW}</a>
+            ${p.step === "shipped" ? `<a class="btn outline" href="${esc(carrierTrackingUrl(order.name))}" target="_blank" rel="noopener">Track shipment live</a>` : ""}
           </div>
         </div>`;
-    })
-    .join("");
 
-  return liquid(
-    portalPage(`
-      ${isTestMode(settings, data?.email) ? `<div class="notice"><strong>Test mode</strong> — the portal isn't live yet. As a tester you can use any of your orders, even unfulfilled ones.</div>` : ""}
-      <h1>Deck Rewards</h1>
-      <p>Hi ${esc(data?.name?.split(" ")[0] ?? "there")} — share your deck and earn Amazon gift cards. Every
-        submission is reviewed by our team; rewards don't depend on what you say, just that it's clear and genuine.</p>
-      <div class="stats">
-        <div class="stat">Available<b>${money(bal.availableCents / 100)}</b></div>
-        <div class="stat">Pending<b>${money(bal.pendingCents / 100)}</b>
-          ${bal.nextAvailableAt ? `<span class="muted">Next available ${fmtDate(bal.nextAvailableAt)}</span>` : ""}</div>
-        <div class="stat">Cashed out<b>${money(bal.sentCents / 100)}</b>
-          ${bal.requestedCents ? `<span class="muted">${money(bal.requestedCents / 100)} on its way</span>` : ""}</div>
-        <div class="stat">In review<b>${inReview}</b></div>
+  const progress =
+    order && p
+      ? `<div class="card">
+          <div class="card-head">
+            <div><h2 class="h2">Your deck's progress</h2><p class="muted" style="margin:0">Order ${esc(order.name)}${p.step === "shipped" || p.step === "delivered" ? " · LTL freight" : ""}</p></div>
+            <span class="pill">${STEP_COPY[p.step].pill}</span>
+          </div>
+          ${progressStrip(order, p)}
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:16px;align-items:center">
+            <span class="muted">${p.step === "delivered" ? "Your deck has been delivered. Please check all parts within 14 days." : `${p.percent}% of your deck is completed.`}</span>
+            <span class="btn-row"><a class="btn link" href="${ctx.url(`/track${q}`)}">View delivery details ${ARROW}</a>
+              ${p.step === "delivered" ? `<a class="btn link" href="${reportIssue}">Report an issue</a>` : ""}</span>
+          </div>
+        </div>`
+      : "";
+
+  const body = `
+    <div class="page-head" style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end">
+      <div>
+        <div class="eyebrow">Your deck. All in one place.</div>
+        <h1 class="h1">Welcome to your A-DIY Hub${ctx.firstName ? `, ${esc(ctx.firstName)}` : ""}.</h1>
+        ${order ? `<p class="muted" style="font-size:14px;margin:0">Order ${esc(order.name)}${line ? ` · ${esc(line.title)}${line.variantTitle ? ` · ${esc(line.variantTitle)}` : ""}` : ""}</p>` : ""}
       </div>
-      ${justCashedOut ? `<div class="notice"><strong>Request received.</strong> We'll email your Amazon gift card within 2 business days.</div>` : ""}
-      ${justSubmitted ? `<div class="notice"><strong>Thanks!</strong> Your submission is in review — we'll email you once our team has looked at it.</div>` : ""}
-      ${uploadsOpen ? "" : `<div class="notice">Uploads are paused for a moment — please check back soon.</div>`}
-      ${orders.length ? orderCards : `<div class="notice">Once your deck has been delivered, you'll be able to earn rewards for it here.</div>`}
-      <div class="card" id="rw-cashout" data-config="${esc(JSON.stringify(cashoutConfig))}">
-        <div class="step">Cash out to an Amazon gift card</div>
-        <div class="card-body">
-          ${
-            canCashOut
-              ? `<p>We'll email an Amazon eGift card for the amount you choose — usually within 2 business days.</p>
-                 <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
-                   <label>Amount ($)<br><input id="rw-amount" type="number" min="${minCashout}" max="${bal.availableCents / 100}" step="1"
-                     value="${Math.floor(bal.availableCents / 100)}" style="font:inherit;padding:9px;width:140px;border:1px solid #ccc;border-radius:4px"></label>
-                   <label style="flex:1;min-width:220px">Send it to<br><input id="rw-email" type="email" value="${esc(data?.email ?? "")}"
-                     style="font:inherit;padding:9px;width:100%;border:1px solid #ccc;border-radius:4px"></label>
-                   <button class="btn" id="rw-cashout-btn">Request gift card</button>
-                 </div>
-                 <p id="rw-cashout-msg" class="notice" style="display:none"></p>`
-              : `<p class="muted">You can cash out once you have at least ${money(minCashout)} available.</p>`
-          }
+      ${
+        order
+          ? `<div class="btn-row"><a class="btn light" href="${esc(order.statusPageUrl)}" target="_blank" rel="noopener">View receipt</a>
+              <a class="btn light" href="${ctx.url("/support")}" data-hub-chat>Message us</a></div>`
+          : ""
+      }
+    </div>
+    ${orderSwitcher(ctx, "/", orders, order)}
+    ${hero}
+    ${progress}
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-head">
+          <div class="icon-tile" style="margin:0">${icon('<path d="M12 3 4 21M12 3l8 18M7.5 13h9"/>')}</div>
+          <span class="label">Your build resources</span>
         </div>
+        <h2 class="h2">Everything you need to build your deck.</h2>
+        <p class="muted" style="font-size:14px">Your installation guide, footing plan, and interactive 3D instructions for your deck kit.</p>
+        <div class="btn-row" style="margin-bottom:16px"><span class="pill">✓ Installation guide</span><span class="pill">✓ Footing plan</span><span class="pill">✓ 3D instructional app</span></div>
+        <div class="spacer"></div>
+        <div><a class="btn" href="${ctx.url(`/resources${q}`)}">View resources ${ARROW}</a></div>
       </div>
+      <div class="card">
+        <div class="card-head">
+          <div class="icon-tile" style="margin:0">${icon('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>')}</div>
+          ${topReward ? `<span class="pill mint">Up to ${money(topReward)} in rewards</span>` : ""}
+        </div>
+        <h2 class="h2">Share your finished deck.</h2>
+        <p class="muted" style="font-size:14px">Upload a full video walkthrough, a short video review, or a photo set to earn rewards.</p>
+        <div class="spacer"></div>
+        <div class="card flat" style="padding:12px 14px;margin:8px 0 16px">
+          <div style="display:flex;justify-content:space-between" class="label"><span>Your submissions</span><span>${Math.min(sent, possible)} of ${possible}</span></div>
+          <div class="meter"><span style="width:${possible ? Math.min(100, Math.round((sent / possible) * 100)) : 0}%"></span></div>
+        </div>
+        <div><a class="btn light" href="${ctx.url("/rewards")}">Explore rewards</a></div>
+      </div>
+    </div>
 
-      ${referralCard}
-      ${historyRows ? `<div class="card"><div class="step">History</div><div class="card-body"><ul class="files">${historyRows}</ul></div></div>` : ""}
-      <script src="${process.env.SHOPIFY_APP_URL}/rewards-portal.js?v=${SCRIPT_VERSION}" defer></script>
-    `),
-  );
+    <div class="banner">
+      <div class="icon-tile" style="margin:0;background:#fff">${icon('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/>')}</div>
+      <div><div class="h3">A better backyard, shared.</div><p>Your friend gets ${friendAmount} off their deck. You earn ${reward} once it's been delivered for ${ctx.settings.referralWaitDays} days.</p></div>
+      <a class="btn light" href="${ctx.url("/refer")}">Refer a friend</a>
+    </div>
+    <div class="banner">
+      <div class="icon-tile" style="margin:0;background:#fff">${icon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')}</div>
+      <div><div class="h3">Need help with your build?</div><p>Our Deck Specialists are here to help with your assembly questions.</p></div>
+      <a class="btn" href="${ctx.url("/support")}" data-hub-chat>Chat now</a>
+    </div>`;
+
+  return renderHub(ctx, "overview", "My DIY Hub", body);
 };
