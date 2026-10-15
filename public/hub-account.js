@@ -45,16 +45,25 @@
     if (!el || !root.contains(el)) return;
     var b = block(el);
 
-    // Edit / Add: swap the read-only view for the form.
-    if (el.hasAttribute("data-edit") && b) {
+    // Edit / Add: swap the read-only view for the form. data-edit="#id" opens another block's form
+    // (e.g. "Add address" in the card header, "Edit" on the billing row).
+    if (el.hasAttribute("data-edit")) {
+      var target = el.getAttribute("data-edit");
+      var tb = target ? root.querySelector(target) : b;
+      if (!tb) return;
       e.preventDefault();
-      var form = b.querySelector(".acct-form");
-      var view = b.querySelector(".acct-view");
+      var form = tb.querySelector(".acct-form");
+      if (!form) return;
+      var view = tb.querySelector(".acct-view");
       if (view) view.hidden = true;
-      if (el.closest(".card-head")) el.hidden = true;
+      if (el.hasAttribute("data-hide-on-open")) {
+        el.hidden = true;
+        form._opener = el;
+      }
       form.hidden = false;
+      if (target && form.scrollIntoView) form.scrollIntoView({ block: "nearest", behavior: "smooth" });
       var first = form.querySelector("input:not([disabled])");
-      if (first) first.focus();
+      if (first) first.focus({ preventScroll: !!target });
       return;
     }
     if (el.hasAttribute("data-cancel") && b) {
@@ -65,8 +74,11 @@
       show(f.querySelector(".acct-msg"), "");
       var v = b.querySelector(".acct-view");
       if (v) v.hidden = false;
-      var edit = b.querySelector(".card-head [data-edit]");
-      if (edit) edit.hidden = false;
+      if (f._opener) {
+        f._opener.hidden = false;
+        f._opener.focus();
+        f._opener = null;
+      }
       return;
     }
 

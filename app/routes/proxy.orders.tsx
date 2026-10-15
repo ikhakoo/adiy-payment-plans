@@ -1,13 +1,17 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { esc, money } from "../lib/portal.server";
-import { ARROW, hubContext, renderHub } from "../lib/hub.server";
-import { fmtDay, orderQuery, orderSwitcher, selectedOrder, type HubOrder } from "../lib/orders.server";
-
-// Whole dollars stay "$5,499"; amounts with cents (installments) show them.
-const amount = (n: number) =>
-  Number.isInteger(n)
-    ? money(n)
-    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+import { esc } from "../lib/portal.server";
+import { ARROW, hubContext, icon, renderHub } from "../lib/hub.server";
+import {
+  HUB_ICONS as I,
+  cents,
+  deliveryNote,
+  fmtDay,
+  orderQuery,
+  orderSwitcher,
+  paymentTotals,
+  selectedOrder,
+  type HubOrder,
+} from "../lib/orders.server";
 
 /** Customer-facing status from Shopify's fulfillment status and the shipments' tracking. */
 function orderStatus(o: HubOrder): { label: string; tone: string } {
@@ -23,19 +27,12 @@ function orderStatus(o: HubOrder): { label: string; tone: string } {
   return { label: "Processing", tone: "gold" };
 }
 
-/** Delivery instructions left at checkout: a note attribute that mentions delivery, else the order note. */
-function deliveryNote(o: HubOrder) {
-  const attr = o.customAttributes.find((a) => /deliver|instruction|gate|drop/i.test(a.key) && a.value?.trim());
-  return attr?.value?.trim() || o.note?.trim() || "";
-}
-
 function paymentRow(o: HubOrder) {
   const plan = o.plan;
-  // Show the order's full total (as on the receipt). A plan's amounts exclude tax and shipping, so
-  // only its outstanding balance is used: that's what's still to be charged.
-  const total = o.total;
-  const remaining = plan ? Number(plan.outstanding) : o.outstanding;
-  const paid = plan ? Math.max(0, total - remaining) : o.received;
+  const amount = (n: number) => cents(n, o.currency);
+  // The order's full total (as on the receipt). A plan's amounts exclude tax and shipping, so only
+  // its outstanding balance is used: that's what's still to be charged.
+  const { total, paid, remaining } = paymentTotals(o);
 
   let detail: string;
   if (plan) {
@@ -49,21 +46,37 @@ function paymentRow(o: HubOrder) {
       parts.push(`Next payment ${fmtDay(when)} · ${amount(Number(next.amount))}`);
     }
     detail = esc(parts.join(" · "));
-    if (next?.status === "FAILED") {
-      detail += `<br><span class="pill warn" style="margin-top:8px;white-space:normal">Last payment didn't go through. We'll retry automatically</span>`;
-    }
   } else if (remaining <= 0) {
     detail = esc(o.card ? `Paid in full with ${o.card}` : "Paid in full");
   } else {
     detail = `${esc(amount(remaining))} remaining on this order`;
   }
+  const failed = plan?.installments.some((i) => i.status === "FAILED");
 
-  return `<div class="ord-pay">
-      <div><div class="label">Total</div><b>${esc(amount(total))}</b></div>
-      <div><div class="label">Paid</div><b>${esc(amount(paid))}</b></div>
-      <div><div class="label">Remaining</div><b>${esc(amount(Math.max(0, remaining)))}</b></div>
+  return `<div class="ord-pay-line">
+      <span>Total: <b>${esc(amount(total))}</b></span>
+      <i aria-hidden="true">/</i>
+      <span>Paid: <b class="ord-paid">${esc(amount(paid))}</b></span>
+      <i aria-hidden="true">/</i>
+      <span>Remaining: <b>${esc(amount(remaining))}</b></span>
     </div>
-    <p class="muted" style="margin:10px 0 0">${detail}</p>`;
+    <p class="ord-pay-detail">${icon(I.card)}<span>${detail}</span></p>
+    ${failed ? `<span class="pill warn ord-pay-warn">Last payment didn't go through. We'll retry automatically</span>` : ""}`;
+}
+
+/** Address lines for the delivery card. */
+function addressHtml(o: HubOrder) {
+  const a = o.shippingAddress;
+  if (!a) return `<p class="muted" style="margin:0">No delivery address on this order.</p>`;
+  const lines = [
+    a.address1,
+    a.address2,
+    [a.city, [a.provinceCode, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+    a.countryCodeV2 === "US" ? null : a.countryCodeV2,
+  ].filter(Boolean);
+  return `${a.name ? `<div class="ord-addr-name">${esc(a.name)}</div>` : ""}
+    <address class="ord-addr-lines">${lines.map((l) => `<span>${esc(l)}</span>`).join("")}</address>
+    ${a.phone ? `<div class="ord-addr-phone">${esc(a.phone)}</div>` : ""}`;
 }
 
 // GET /apps/hub/orders — My Orders: one order's kit, payment summary, documents and delivery address.
@@ -88,6 +101,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       "My Orders",
       `${head}
       <div class="card" style="text-align:center;padding:40px 24px">
+        <div class="ord-tile" style="margin:0 auto 14px">${icon(I.box)}</div>
         <h2 class="h2">No orders yet</h2>
         <p class="muted" style="max-width:420px;margin:0 auto 18px">When you order a deck kit with ${esc(ctx.email ?? "this account")}, it will show up here with its payment details and documents.</p>
         <a class="btn" href="/">Shop deck kits</a>
@@ -99,85 +113,87 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const items = order.lineItems
     .map(
       (l) => `<div class="ord-item">
-          ${l.image ? `<img src="${esc(l.image)}" alt="" loading="lazy">` : `<span class="ord-img"></span>`}
-          <div>
-            <div class="h3">${esc(l.title)}</div>
-            ${l.variantTitle ? `<div class="muted">Size: ${esc(l.variantTitle)}</div>` : ""}
-            <div class="label" style="margin-top:6px">Qty: ${l.quantity} ${l.quantity === 1 ? "unit" : "units"}</div>
+          ${l.image ? `<img src="${esc(l.image)}" alt="" loading="lazy">` : `<span class="ord-img">${icon(I.box)}</span>`}
+          <div class="ord-item-text">
+            <div class="ord-item-title">${esc(l.title)}</div>
+            ${l.variantTitle ? `<div class="ord-item-size">Size: ${esc(l.variantTitle)}</div>` : ""}
           </div>
+          <span class="ord-qty">Qty: ${l.quantity} ${l.quantity === 1 ? "unit" : "units"}</span>
         </div>`,
     )
     .join("");
 
-  const a = order.shippingAddress;
+  const q = orderQuery(order);
+  const invoiceUrl = ctx.url(`/invoice${q}`);
+  const receiptUrl = ctx.url(`/invoice${q}${q ? "&" : "?"}view=receipt`);
+  const doc = (href: string, ico: string, label: string, trail: string, hint: string) =>
+    `<a class="ord-doc-btn" href="${esc(href)}" target="_blank" rel="noopener" title="${esc(hint)}">${icon(ico)}<span>${esc(label)}</span>${icon(trail)}</a>`;
+
   const note = deliveryNote(order);
-  const addressCard = `
-    <div class="card">
-      <div class="label" style="margin-bottom:10px">Delivery address</div>
-      ${
-        a
-          ? `<address class="ord-address">${[
-              a.name,
-              a.address1,
-              a.address2,
-              [a.city, [a.provinceCode, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-              a.countryCodeV2 === "US" ? null : a.countryCodeV2,
-              a.phone,
-            ]
-              .filter(Boolean)
-              .map((line) => esc(line))
-              .join("<br>")}</address>`
-          : `<p class="muted">No delivery address on this order.</p>`
-      }
-      ${note ? `<div class="label" style="margin:14px 0 4px">Delivery instructions</div><p style="margin:0;font-size:14px">${esc(note)}</p>` : ""}
-      <a class="btn link" style="margin-top:16px" href="${ctx.url("/account")}">View account &amp; addresses ${ARROW}</a>
-    </div>`;
 
   const body = `${head}
-    <div class="with-aside">
-      <div class="card ord-card">
-        <div class="card-head">
+    <div class="card ord-card">
+      <div class="ord-card-head">
+        <div class="ord-id">
+          <span class="ord-tile">${icon(I.box)}</span>
           <div>
-            <div class="eyebrow">Your order</div>
-            <h2 class="h2">Order ${esc(order.name)}</h2>
-            <div class="muted">Placed ${esc(fmtDay(order.createdAt))}</div>
+            <div class="label">Your order</div>
+            <h2 class="ord-title">Order ${esc(order.name)}</h2>
           </div>
-          <span class="pill dot ${status.tone}">${esc(status.label)}</span>
         </div>
+        <div class="ord-meta">
+          <span class="ord-status ${status.tone}">${esc(status.label)}</span>
+          <span class="ord-date">${esc(fmtDay(order.createdAt))}</span>
+        </div>
+      </div>
 
+      <div class="ord-rows">
         <section class="ord-row">
-          <div class="ord-row-label"><div class="label">01 · Product</div><div class="h3">Your deck kit</div></div>
-          <div>${items || `<p class="muted">No items on this order.</p>`}</div>
+          <div class="ord-row-label"><div class="label">01 · Product</div><div class="ord-row-title">Your deck kit</div></div>
+          <div class="ord-items">${items || `<p class="muted">No items on this order.</p>`}</div>
         </section>
 
         <section class="ord-row">
-          <div class="ord-row-label"><div class="label">02 · Payment</div><div class="h3">Payment summary</div></div>
+          <div class="ord-row-label"><div class="label">02 · Payment</div><div class="ord-row-title">Payment summary</div></div>
           <div>${paymentRow(order)}</div>
         </section>
 
         <section class="ord-row">
-          <div class="ord-row-label"><div class="label">03 · Documents</div><div class="h3">Order documents</div></div>
-          <div>
-            <a class="ord-doc" href="${esc(order.statusPageUrl)}" target="_blank" rel="noopener">
-              <span><b>Order status &amp; receipt</b><span class="muted">Your order confirmation, items and payments</span></span>${ARROW}
-            </a>
+          <div class="ord-row-label"><div class="label">03 · Archival</div><div class="ord-row-title">Order documents</div></div>
+          <div class="ord-docs">
+            ${doc(invoiceUrl, I.fileText, `Invoice ${order.name}`, I.download, "Printable invoice: save it as a PDF from the print dialog")}
+            ${doc(order.statusPageUrl, I.fileCheck, "Order confirmation", I.external, "Your order status page from checkout")}
+            ${doc(receiptUrl, I.receipt, "Receipts & tax details", I.download, "Payments received and tax breakdown, printable")}
           </div>
         </section>
-
-        <div class="btn-row ord-actions">
-          <a class="btn" href="${ctx.url("/track" + orderQuery(order))}">View live progress ${ARROW}</a>
-          <a class="btn light" href="${ctx.url("/support")}" data-hub-chat>Message us</a>
-        </div>
       </div>
-      <aside>
-        ${addressCard}
-        <div class="hero ord-teaser">
-          <div class="eyebrow">Ready to build?</div>
-          <h2 class="h2">Everything you need to build your deck.</h2>
-          <p>Find your installation guide, footing plan, and interactive 3D instructions for your deck kit.</p>
-          <a class="btn white" href="${ctx.url("/resources" + orderQuery(order))}">View build resources ${ARROW}</a>
+
+      <div class="ord-actions">
+        <a class="btn ord-btn" href="${ctx.url("/track" + q)}">${icon(I.truck)}View live progress</a>
+        <a class="btn light ord-btn" href="${ctx.url("/support")}" data-hub-chat>${icon(I.headset)}Message us</a>
+      </div>
+    </div>
+
+    <div class="ord-bottom">
+      <div class="card ord-delivery">
+        <h2 class="ord-delivery-title">${icon(I.pin)}Delivery address</h2>
+        <p class="ord-delivery-sub">The delivery address and instructions for this order.</p>
+        <div class="ord-addr">
+          ${addressHtml(order)}
+          ${
+            note
+              ? `<p class="ord-addr-note">${icon(I.check)}<span><b>Delivery instructions:</b> ${esc(note)}</span></p>`
+              : `<p class="ord-addr-note muted">${icon(I.info)}<span>No delivery instructions were added to this order.</span></p>`
+          }
         </div>
-      </aside>
+        <a class="btn light ord-addr-btn" href="${ctx.url("/account")}">View account &amp; addresses ${ARROW}</a>
+      </div>
+      <div class="ord-teaser">
+        <div class="ord-teaser-eyebrow">${icon(I.tools)}Ready to build?</div>
+        <h2 class="ord-teaser-title">Everything you need to build your deck.</h2>
+        <p>Find your installation guide, footing plan, and interactive 3D instructions for your deck kit.</p>
+        <a class="btn white" href="${ctx.url("/resources" + q)}">View build resources</a>
+      </div>
     </div>`;
 
   return renderHub(ctx, "orders", "My Orders", body);

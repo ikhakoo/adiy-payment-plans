@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { esc } from "../lib/portal.server";
-import { asset, hubContext, renderHub, type HubContext } from "../lib/hub.server";
-import { hubOrders } from "../lib/orders.server";
+import { asset, hubContext, icon, renderHub, type HubContext } from "../lib/hub.server";
+import { HUB_ICONS as I, addressLine, deliveryNote, hubOrders } from "../lib/orders.server";
 
 const CUSTOMER = `#graphql
   query HubAccount($id: ID!) {
@@ -10,7 +10,7 @@ const CUSTOMER = `#graphql
       lastName
       defaultEmailAddress { emailAddress }
       defaultPhoneNumber { phoneNumber }
-      defaultAddress { id }
+      defaultAddress { id firstName lastName company address1 address2 city provinceCode zip countryCodeV2 phone }
       addressesV2(first: 25) {
         nodes { id firstName lastName company address1 address2 city provinceCode zip countryCodeV2 phone }
       }
@@ -62,7 +62,7 @@ interface Customer {
   lastName: string | null;
   defaultEmailAddress: { emailAddress: string } | null;
   defaultPhoneNumber: { phoneNumber: string } | null;
-  defaultAddress: { id: string } | null;
+  defaultAddress: Address | null;
   addressesV2: { nodes: Address[] };
 }
 type UserError = { field: string[] | null; message: string };
@@ -125,6 +125,13 @@ function addressForm(a: Partial<Address> | null, intent: "address-create" | "add
     </form>`;
 }
 
+/** "742 Evergreen Terrace" / "Maplewood, NJ 07040" for a saved address. */
+const street = (a: Pick<Address, "address1" | "address2">) => [a.address1, a.address2].filter(Boolean).join(", ");
+const area = (a: Pick<Address, "city" | "provinceCode" | "zip">) =>
+  [a.city, [a.provinceCode, a.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+const sameAddress = (x: { address1: string | null; zip: string | null } | null | undefined, y: typeof x) =>
+  !!x && !!y && (x.address1 ?? "").trim().toLowerCase() === (y.address1 ?? "").trim().toLowerCase() && (x.zip ?? "").replace(/\s/g, "") === (y.zip ?? "").replace(/\s/g, "");
+
 // GET /apps/hub/account — Account & Addresses: contact details, saved addresses, the active order's address.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { page, ctx } = await hubContext(request);
@@ -135,21 +142,30 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const email = customer?.defaultEmailAddress?.emailAddress ?? ctx.email ?? "";
   const phone = customer?.defaultPhoneNumber?.phoneNumber ?? "";
   const fullName = [customer?.firstName, customer?.lastName].filter(Boolean).join(" ") || ctx.customerName || "";
-  const defaultId = customer?.defaultAddress?.id ?? null;
+  const defaultAddress = customer?.defaultAddress ?? null;
+  const defaultId = defaultAddress?.id ?? null;
   // Default first, then the rest in Shopify's order.
   const addresses = [...(customer?.addressesV2.nodes ?? [])].sort((x, y) => Number(y.id === defaultId) - Number(x.id === defaultId));
+  const head = (ico: string, title: string, sub: string, action = "") => `
+      <div class="acc-head">
+        <div class="acc-head-main">
+          <span class="acc-tile">${icon(ico)}</span>
+          <div><h2 class="acc-title">${title}</h2><p class="acc-sub">${sub}</p></div>
+        </div>
+        ${action}
+      </div>`;
 
   const personal = `
-    <div class="card acct-block">
-      <div class="card-head">
-        <div><h2 class="h2">Personal information</h2><p class="muted" style="margin:0">Your contact details for order updates and support.</p></div>
-        <button class="btn light" type="button" data-edit>Edit details</button>
+    <div class="card acct-block acc-card">
+      ${head(I.contact, "Personal information", "Your contact details for order updates and support.", `<button class="acc-textbtn" type="button" data-edit data-hide-on-open>${icon(I.pen)}Edit details</button>`)}
+      <div class="acct-view acc-fields">
+        <div class="acc-field"><div class="label">Full name</div><div class="acc-name">${esc(fullName) || '<span class="muted">Not set</span>'}</div></div>
+        <div class="acc-field">
+          <div class="label">Email &amp; phone</div>
+          <div class="acc-contact"><span>${esc(email)}</span>${phone ? `<i aria-hidden="true">·</i><span>${esc(phone)}</span>` : `<i aria-hidden="true">·</i><span class="muted">No phone added</span>`}</div>
+          ${email ? `<span class="acc-verified">${icon(I.circleCheck)}Verified contact details</span>` : ""}
+        </div>
       </div>
-      <dl class="acct-view acct-dl">
-        <div><dt class="label">Full name</dt><dd>${esc(fullName) || '<span class="muted">Not set</span>'}</dd></div>
-        <div><dt class="label">Email</dt><dd>${esc(email)}</dd></div>
-        <div><dt class="label">Phone</dt><dd>${esc(phone) || '<span class="muted">Not set</span>'}</dd></div>
-      </dl>
       <form class="acct-form" data-intent="profile" hidden novalidate>
         <div class="acct-grid">
           ${field("First name", "firstName", customer?.firstName, 'autocomplete="given-name"')}
@@ -166,19 +182,41 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       </form>
     </div>`;
 
+  // The newest order with a delivery address: where the deck in progress is going.
+  const active = orders.find((o) => o.shippingAddress);
+  const s = active?.shippingAddress;
+  const note = active ? deliveryNote(active) : "";
+  const activeBlock = s
+    ? `<div class="acc-active">
+        <div class="acc-tags">
+          <span class="acc-tag dark">Active order address</span>
+          <span class="acc-tag">${icon(I.clock)}Order ${esc(active!.name)}</span>
+        </div>
+        <div class="acc-active-street">${esc(street(s)) || esc(s.name ?? "")}</div>
+        <div class="acc-active-area">${esc(area(s))}</div>
+        ${note ? `<p class="acc-active-note">${icon(I.squareCheck)}<span>${esc(note)}</span></p>` : ""}
+        <p class="acc-caution">${icon(I.info)}<span>Updating a saved address does not change an existing order. To change where this order is delivered, <a href="${ctx.url("/support")}" data-hub-chat>message us</a>.</span></p>
+      </div>`
+    : "";
+
   const list = addresses
     .map((a) => {
       const isDefault = a.id === defaultId;
-      return `<li class="acct-block acct-address">
+      const name = [a.firstName, a.lastName].filter(Boolean).join(" ");
+      return `<li class="acct-block acc-addr"${isDefault ? ' id="acc-default"' : ""}>
           <div class="acct-view">
-            <div class="acct-address-head">
-              <address class="ord-address">${addressLines(a)}</address>
-              ${isDefault ? `<span class="pill mint">Default</span>` : ""}
+            <div class="acc-addr-head">
+              <span class="acc-addr-ico">${icon(I.pin)}</span>
+              <div class="acc-addr-body">
+                ${name ? `<b>${esc(name)}</b>` : ""}
+                <address class="ord-address">${addressLines({ ...a, firstName: null, lastName: null })}</address>
+              </div>
+              ${isDefault ? `<span class="acc-tag mint">Default</span>` : ""}
             </div>
-            <div class="btn-row acct-links">
-              <button class="btn link" type="button" data-edit>Edit</button>
-              <button class="btn link" type="button" data-intent="address-delete" data-id="${esc(a.id)}">Remove</button>
-              ${isDefault ? "" : `<button class="btn link" type="button" data-intent="address-default" data-id="${esc(a.id)}">Make default</button>`}
+            <div class="acc-addr-actions">
+              <button class="acc-link" type="button" data-edit>${icon(I.pen)}Edit</button>
+              <button class="acc-link" type="button" data-intent="address-delete" data-id="${esc(a.id)}">${icon(I.trash)}Remove</button>
+              ${isDefault ? "" : `<button class="acc-link" type="button" data-intent="address-default" data-id="${esc(a.id)}">${icon(I.star)}Make default</button>`}
             </div>
             <p class="notice warn acct-msg" hidden></p>
           </div>
@@ -187,47 +225,56 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     })
     .join("");
 
-  const saved = `
-    <div class="card">
-      <div class="card-head">
-        <div><h2 class="h2">Saved addresses</h2><p class="muted" style="margin:0">Shipping and billing addresses for future orders.</p></div>
+  // Billing: Shopify keeps one default address per customer, which checkout uses for shipping and
+  // billing. Without one, fall back to the billing address on the newest order (read-only).
+  const lastBilling = orders.find((o) => o.billingAddress)?.billingAddress ?? null;
+  const defaultLine = defaultAddress ? addressLine({ ...defaultAddress, name: null }) : "";
+  const billingSource = defaultLine
+    ? { line: defaultLine, from: "default" as const }
+    : lastBilling && addressLine(lastBilling)
+      ? { line: addressLine(lastBilling), from: "order" as const }
+      : null;
+  const billingTag = !billingSource
+    ? ""
+    : sameAddress(billingSource.from === "default" ? defaultAddress : lastBilling, s)
+      ? "Matches shipping"
+      : billingSource.from === "default"
+        ? "Your default address"
+        : `From order ${esc(orders.find((o) => o.billingAddress)!.name)}`;
+  const billing = `
+    <div class="acc-billing">
+      <span class="acc-billing-ico">${icon(I.receipt)}</span>
+      <div class="acc-billing-body">
+        <div class="acc-billing-head"><span class="acc-billing-label">Default billing address</span>${billingTag ? `<i aria-hidden="true">·</i><span>${billingTag}</span>` : ""}</div>
+        <div class="acc-billing-line">${billingSource ? esc(billingSource.line) : '<span class="muted">No billing address yet. Add an address and make it your default.</span>'}</div>
       </div>
-      ${list ? `<ul class="acct-list">${list}</ul>` : `<p class="muted">You don't have any saved addresses yet.</p>`}
-      <div class="acct-block acct-new">
-        <div class="acct-view"><button class="btn outline" type="button" data-edit>+ Add address</button></div>
-        ${addressForm(null, "address-create")}
+      <div class="acc-billing-actions">
+        ${defaultAddress ? `<button class="acc-plain" type="button" data-edit="#acc-default">Edit</button><i aria-hidden="true">/</i>` : ""}
+        ${addresses.length > 1 ? `<a class="acc-plain" href="#acc-list">Change</a>` : `<button class="acc-plain" type="button" data-edit="#acc-new">${defaultAddress ? "Change" : "Add"}</button>`}
       </div>
     </div>`;
 
-  const active = orders.find((o) => o.shippingAddress);
-  const s = active?.shippingAddress;
-  const activeBlock = s
-    ? `<div class="card flat">
-        <div class="label" style="margin-bottom:8px">Active order address · ${esc(active!.name)}</div>
-        <address class="ord-address">${[
-          s.name,
-          s.address1,
-          s.address2,
-          [s.city, [s.provinceCode, s.zip].filter(Boolean).join(" ")].filter(Boolean).join(", "),
-        ]
-          .filter(Boolean)
-          .map((l) => esc(l))
-          .join("<br>")}</address>
-        <div class="notice warn" style="margin:14px 0 0">Updating a saved address does not change an existing order. To change where this order is delivered, <a href="${ctx.url("/support")}" data-hub-chat>message us</a>.</div>
-      </div>`
-    : "";
+  const saved = `
+    <div class="card acc-card" id="acc-addresses">
+      ${head(I.truck, "Saved addresses", "Shipping and billing addresses for future orders.", `<button class="acc-add" type="button" data-edit="#acc-new" data-hide-on-open>${icon(I.plus)}Add address</button>`)}
+      ${activeBlock}
+      <div class="acct-block acc-new" id="acc-new">${addressForm(null, "address-create")}</div>
+      ${
+        list
+          ? `<div class="label acc-list-label" id="acc-list">Your saved addresses</div><ul class="acct-list acc-list">${list}</ul>`
+          : `<p class="muted acc-empty">You don't have any saved addresses yet. Use <b>Add address</b> to save one for future orders.</p>`
+      }
+      ${billing}
+    </div>`;
 
   const body = `
-    <div class="page-head">
+    <div class="page-head acc-page-head">
       <h1 class="h1">Your account, all in one place.</h1>
       <p class="lede">Manage your contact details, saved addresses, and account settings.</p>
     </div>
     ${updated ? `<div class="notice">Your changes have been saved.</div>` : ""}
-    <div class="acct" id="hub-account" data-config="${esc(JSON.stringify({ url: ctx.url("/account") }))}">
-      <div class="with-aside">
-        <div>${personal}${saved}</div>
-        <aside>${activeBlock}</aside>
-      </div>
+    <div class="acct acc" id="hub-account" data-config="${esc(JSON.stringify({ url: ctx.url("/account") }))}">
+      ${personal}${saved}
     </div>
     <script src="${asset("hub-account.js")}" defer></script>`;
 

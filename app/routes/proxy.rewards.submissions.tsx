@@ -1,8 +1,8 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { esc, money } from "../lib/portal.server";
 import { fmtDate } from "../lib/ledger.server";
-import { hubContext, renderHub } from "../lib/hub.server";
-import { rewardsLayout, sentSubmissions, STATUS_PILL } from "../lib/hub-rewards.server";
+import { ARROW, hubContext, renderHub } from "../lib/hub.server";
+import { rewardIcon, rewardsLayout, rwIcon, sentSubmissions, STATUS_PILL } from "../lib/hub-rewards.server";
 
 // GET /apps/hub/rewards/submissions — Rewards › My submissions: everything sent for review.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -22,14 +22,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             ? "Our team reviews submissions within 2 to 3 business days."
             : esc(s.reviewMessage);
       return `<li>
-          <div>
+          <span class="rw-tile sm">${rewardIcon(s.rewardType, 0)}</span>
+          <div class="rw-sub-text">
             <div class="h3">${esc(s.rewardType.name)}</div>
             <div class="muted">Order ${esc(s.orderName)} · Sent ${fmtDate(s.submittedAt ?? s.createdAt)}</div>
-            ${detail ? `<div class="muted" style="margin-top:4px">${detail}</div>` : ""}
+            ${detail ? `<div class="muted rw-sub-detail">${detail}</div>` : ""}
           </div>
-          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+          <div class="rw-sub-side">
             ${STATUS_PILL[s.status]}
-            ${s.status === "NEEDS_CHANGES" ? `<a class="btn" href="${submitUrl}">Update</a>` : ""}
+            ${s.status === "NEEDS_CHANGES" ? `<a class="btn" href="${submitUrl}">Update${ARROW}</a>` : ""}
           </div>
         </li>`;
     })
@@ -39,12 +40,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ${justSubmitted ? `<div class="notice"><strong>Thanks!</strong> Your submission is in review. We'll email you once our team has looked at it.</div>` : ""}
     ${
       rows
-        ? `<div class="card"><div class="card-head"><h2 class="h2">Your submissions</h2>
-             <span class="pill">${submissions.length} sent</span></div><ul class="rows">${rows}</ul></div>`
-        : `<div class="card" style="text-align:center;padding:48px 24px">
+        ? `<div class="card rw-subs"><div class="card-head"><h2 class="h2">Your submissions</h2>
+             <span class="pill">${submissions.length} sent</span></div><ul class="rw-sub-list">${rows}</ul></div>`
+        : `<div class="card rw-empty">
+             <span class="rw-empty-ico">${rwIcon("upload")}</span>
              <h2 class="h2">No files uploaded yet</h2>
-             <p class="muted" style="max-width:420px;margin:0 auto 18px">Pick a reward to submit your video walkthrough, short clip or photo set and start earning gift card credit.</p>
-             <a class="btn" href="${ctx.url("/rewards")}">Explore rewards</a>
+             <p>Choose a reward on the Earn rewards tab to submit your video walkthrough, short clip, or photo set and start earning gift card credit.</p>
+             <a class="rw-textlink" href="${ctx.url("/rewards")}">Explore submission guidelines${ARROW}</a>
            </div>`
     }`;
 

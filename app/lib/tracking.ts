@@ -15,6 +15,8 @@ export interface TrackableOrder {
     inTransitAt: string | null;
     deliveredAt: string | null;
     trackingInfo: { company: string | null; number: string | null; url: string | null }[];
+    /** Carrier scan events Shopify has for this fulfillment, if any. */
+    events?: { nodes: { status: string; happenedAt: string; message: string | null }[] };
   }[];
 }
 
@@ -87,4 +89,60 @@ export function partsGuarantee(deliveredAt: Date | null, now = new Date()) {
   const activeUntil = new Date(deliveredAt.getTime() + 14 * 24 * 60 * 60 * 1000);
   const daysLeft = Math.max(0, Math.ceil((activeUntil.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
   return { activeUntil, daysLeft, active: daysLeft > 0 };
+}
+
+export type UpdateKind = "production" | "packing" | "shipped" | "out" | "delivered" | "alert";
+export interface OrderUpdate {
+  kind: UpdateKind;
+  title: string;
+  text: string;
+  /** null for the step under way right now, which has no date yet. */
+  at: Date | null;
+}
+
+// Carrier events worth telling the customer about, keyed by Shopify's FulfillmentEventStatus.
+const EVENT_COPY: Record<string, Omit<OrderUpdate, "at">> = {
+  IN_TRANSIT: { kind: "shipped", title: "Your deck has shipped.", text: "Your deck has left our facility and is on its way to your local terminal." },
+  OUT_FOR_DELIVERY: { kind: "out", title: "Your deck is out for delivery.", text: "Your deck has left the local terminal and is on its way to your property." },
+  ATTEMPTED_DELIVERY: { kind: "alert", title: "Delivery was attempted.", text: "The carrier tried to deliver your deck. They'll contact you to arrange a new time." },
+  DELAYED: { kind: "alert", title: "Your shipment is delayed.", text: "The carrier has reported a delay. We'll keep an eye on it and let you know if anything changes." },
+  DELIVERED: { kind: "delivered", title: "Your deck has arrived.", text: "Your deck was delivered to the curb or driveway at your property." },
+};
+
+/**
+ * The order's journey so far, newest first: real dates only (order placed, fulfillment created,
+ * carrier events from Shopify), plus an undated entry for the step under way while we still have the deck.
+ */
+export function orderUpdates(order: TrackableOrder, p: DeckProgress): OrderUpdate[] {
+  const out: OrderUpdate[] = [
+    {
+      kind: "production",
+      title: "Your deck is in production.",
+      text: "Your order is confirmed. Your materials are selected and your deck is being made just for you.",
+      at: new Date(order.createdAt),
+    },
+  ];
+  if (p.step === "packing") {
+    out.push({ kind: "packing", title: "Your deck is getting ready to ship.", text: "Quality checks are under way. Everything is being packed and secured for its trip to you.", at: null });
+  }
+  const f = order.fulfillments[0];
+  if (f) {
+    out.push({ kind: "packing", title: "Your deck is ready to ship.", text: "Quality checks are complete. Everything is packed and secured for its trip to you.", at: new Date(f.createdAt) });
+  }
+  const seen = new Set<string>();
+  for (const ff of order.fulfillments) {
+    for (const e of ff.events?.nodes ?? []) {
+      const copy = EVENT_COPY[e.status];
+      const repeatable = e.status === "ATTEMPTED_DELIVERY" || e.status === "DELAYED";
+      if (!copy || (seen.has(e.status) && !repeatable)) continue;
+      seen.add(e.status);
+      out.push({ ...copy, at: new Date(e.happenedAt) });
+    }
+  }
+  if (!seen.has("IN_TRANSIT") && p.shippedAt && (p.step === "shipped" || p.step === "delivered")) {
+    out.push({ ...EVENT_COPY.IN_TRANSIT, at: p.shippedAt });
+  }
+  if (!seen.has("DELIVERED") && p.deliveredAt) out.push({ ...EVENT_COPY.DELIVERED, at: p.deliveredAt });
+  // Newest first; the undated "happening now" entry goes on top.
+  return out.sort((a, b) => (b.at?.getTime() ?? Infinity) - (a.at?.getTime() ?? Infinity));
 }

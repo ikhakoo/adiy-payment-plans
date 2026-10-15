@@ -1,9 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { esc } from "../lib/portal.server";
 import { hubContext, renderHub } from "../lib/hub.server";
-import { fmtDay, fmtDayTime, mainLine, orderQuery, orderSwitcher, selectedOrder } from "../lib/orders.server";
-import { carrierTrackingUrl, deckProgress, partsGuarantee, PRODUCTION_CHECKLIST } from "../lib/tracking";
-import { percentBar, progressStrip, shopifyTracking, STEP_COPY } from "../lib/tracking-view.server";
+import { fmtDay, mainLine, orderQuery, orderSwitcher, selectedOrder } from "../lib/orders.server";
+import { deckProgress, partsGuarantee, PRODUCTION_CHECKLIST } from "../lib/tracking";
+import { carrierCards, GLYPH, liveTrackingUrl, percentBar, progressLine, STEP_COPY, updatesTimeline } from "../lib/tracking-view.server";
 
 const CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -24,7 +24,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const line = mainLine(order);
   const support = (topic: string) => ctx.url(`/support?topic=${topic}&order=${order.numericId}`);
   const withCarrier = p.step === "shipped" || p.step === "delivered";
-  const tracking = shopifyTracking(order);
   const guarantee = partsGuarantee(p.deliveredAt);
 
   // Plan orders ship once the final payment is made, so production may pause before packing.
@@ -36,25 +35,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         }</div>`
       : "";
 
-  const carrierRows = withCarrier
-    ? `<ul class="rows" style="margin-top:20px">
-        <li><div><div class="label">Carrier &amp; tracking details</div>
-          <div>LTL freight · Order ${esc(order.name)}</div>
-          ${tracking.map((t) => `<div class="muted">${esc(t.company ?? "Carrier")} ${t.number ? `· ${esc(t.number)}` : ""}</div>`).join("")}</div>
-          <div class="btn-row" style="justify-content:flex-end">
-            ${tracking[0]?.number ? `<button class="btn light" type="button" data-copy-value="${esc(tracking[0].number)}">Copy tracking number</button>` : ""}
-            <a class="btn" href="${esc(tracking.find((t) => t.url)?.url ?? carrierTrackingUrl(order.name))}" target="_blank" rel="noopener">Track shipment live</a>
-          </div></li>
-        ${
-          p.deliveredAt
-            ? `<li><div><div class="label">Delivery confirmation</div><div>${fmtDayTime(p.deliveredAt)}</div>
-                <div class="muted">Your carrier has confirmed delivery to your property.</div></div></li>`
-            : ""
-        }
-      </ul>`
-    : "";
-
-  // While we still have the deck: the theme's build checklist, and the steps & railings offer.
+  // While we still have the deck: the theme's build checklist.
   const checklist =
     p.step === "production"
       ? `<div class="card">
@@ -64,19 +45,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             (c, i) => `<li class="${i < p.checklistDone ? "done" : ""}"><span class="box">${i < p.checklistDone ? CHECK : ""}</span>
               <div><b>${c.title}</b><span>${c.text}</span></div></li>`,
           ).join("")}</ul>
-        </div>`
-      : "";
-  const upsell =
-    p.step === "production" || p.step === "packing"
-      ? `<div class="card upsell">
-          <span class="pill gold dot">${p.step === "packing" ? "Last chance, leaves in a few days" : "Before we pack your order"}</span>
-          <h2 class="h2" style="margin-top:10px">${p.step === "packing" ? "Last chance to add steps & railings." : "Thinking about steps & railings? Now is the time."}</h2>
-          <p class="muted">${
-            p.step === "packing"
-              ? "Your deck is being packed for shipment. This is the final point where we can add steps or railings and send everything together at no additional shipping cost."
-              : "Your deck is still in production, which means we can add them to the same shipment at no additional shipping cost. Once your deck leaves our facility, steps and railings become a separate shipment."
-          }</p>
-          <a class="btn" href="${ctx.url("/support")}" data-hub-chat>Chat with us to add steps or railings</a>
         </div>`
       : "";
   const deliveryDay =
@@ -93,56 +61,71 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         </div>`
       : "";
 
+  const chip =
+    p.step === "delivered"
+      ? `<span class="trk-chip-status ok">${GLYPH.checkCircle}Confirmed</span>`
+      : p.step === "shipped"
+        ? `<span class="trk-chip-status">In transit</span>`
+        : `<span class="trk-chip-status warn">${p.percent}% complete</span>`;
+
   const body = `
-    <div class="page-head" style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:flex-end">
+    <div class="page-head trk-head">
       <div>
         <h1 class="h1">Track your deck.</h1>
-        <p class="muted" style="font-size:14px;margin:0">Order ${esc(order.name)}${line ? ` · ${esc(line.title)}` : ""}</p>
+        <p class="trk-meta">Order ${esc(order.name)}${line ? `<i></i><b>${esc(line.title)}</b>` : ""}</p>
       </div>
-      <span class="pill ${p.step === "delivered" ? "mint" : "gold"} dot">${copy.pill}</span>
+      <span class="trk-status ${p.step === "delivered" ? "ok" : p.step === "shipped" ? "" : "warn"}"><i></i>${copy.pill}</span>
     </div>
     ${orderSwitcher(ctx, "/track", orders, order)}
     ${planHold}
-    <div class="card">
-      <div class="card-head">
-        <div><h2 class="h2">${copy.title}</h2><p class="muted" style="margin:0">${copy.text}</p></div>
+    <div class="card trk-main">
+      <div class="trk-top">
+        <div>
+          <div class="trk-title"><h2>${copy.pill}</h2>${chip}</div>
+          <p class="trk-sub">${copy.title} ${copy.text}</p>
+        </div>
+        ${withCarrier ? `<a class="trk-top-btn" href="${esc(liveTrackingUrl(order))}" target="_blank" rel="noopener">${GLYPH.receipt}Track shipment live</a>` : ""}
       </div>
-      ${percentBar(p)}
-      <div style="margin-top:16px">${progressStrip(order, p)}</div>
-      ${carrierRows}
+      ${p.step === "production" || p.step === "packing" ? `<div class="trk-percent">${percentBar(p)}</div>` : ""}
+      ${progressLine(order, p)}
+      ${carrierCards(order, p)}
+      ${updatesTimeline(order, p)}
     </div>
-    ${upsell}
     ${checklist}
     ${deliveryDay}
-    <div class="grid2">
-      <div class="card">
-        <div class="label">Next step: assembly</div>
-        <h2 class="h2" style="margin-top:6px">Ready to build?</h2>
-        <p class="muted">Find your installation guide, footing plan, and interactive 3D instructions for your deck kit.</p>
-        <div class="btn-row" style="margin-bottom:16px"><span class="pill">Installation guide</span><span class="pill">Footing plan</span><span class="pill">3D instructional app</span></div>
+    <div class="grid2 trk-grid">
+      <div class="card trk-card2">
+        <span class="trk-tile">${GLYPH.book}</span>
+        <div class="trk-kicker">Next step: assembly</div>
+        <h2 class="h2">Ready to build?</h2>
+        <p class="trk-card2-text">Find your installation guide, footing plan, and interactive 3D instructions for your deck kit.</p>
+        <div class="trk-tags"><span>Installation guide</span><span>Footing plan</span><span>3D instructional app</span></div>
         <div class="spacer"></div>
-        <div><a class="btn" href="${ctx.url(`/resources${orderQuery(order)}`)}">View build resources</a></div>
+        <div><a class="trk-btn-dark" href="${ctx.url(`/resources${orderQuery(order)}`)}">View build resources ${GLYPH.arrow}</a></div>
       </div>
-      <div class="card">
-        <div class="label">Check your delivery</div>
-        <h2 class="h2" style="margin-top:6px">Something missing or damaged?</h2>
-        <p class="muted">Please check all parts within 14 days of delivery. If anything is missing or damaged, send us photos and a short description.</p>
-        ${
+      <div class="card trk-card2">
+        <span class="trk-tile">${GLYPH.shield}</span>
+        <div class="trk-kicker">Check your delivery</div>
+        <h2 class="h2">Something missing or damaged?</h2>
+        <p class="trk-card2-text">Please check all parts within 14 days of delivery. If anything is missing or damaged, send us photos and a short description.</p>
+        <div class="trk-guarantee${guarantee && !guarantee.active ? " ended" : ""}">${GLYPH.clipboardCheck}<span>${
           guarantee
-            ? `<p><span class="pill ${guarantee.active ? "ok" : ""} dot">${
-                guarantee.active ? `Active until ${fmtDay(guarantee.activeUntil)} (${guarantee.daysLeft} days remaining)` : `Ended ${fmtDay(guarantee.activeUntil)}`
-              }</span></p>`
-            : `<p><span class="pill">Starts when your deck is delivered</span></p>`
-        }
+            ? guarantee.active
+              ? `Active until ${fmtDay(guarantee.activeUntil)} (${guarantee.daysLeft} ${guarantee.daysLeft === 1 ? "day" : "days"} remaining)`
+              : `Ended ${fmtDay(guarantee.activeUntil)}`
+            : "Your 14 days start when your deck is delivered"
+        }</span></div>
         <div class="spacer"></div>
-        <div><a class="btn light" href="${support("parts")}">Report an issue</a></div>
+        <div><a class="trk-btn-soft" href="${support("parts")}">Report an issue</a></div>
       </div>
     </div>
     <script>
       document.addEventListener("click", function (e) {
         var b = e.target.closest && e.target.closest("[data-copy-value]");
         if (!b || !navigator.clipboard) return;
-        navigator.clipboard.writeText(b.getAttribute("data-copy-value")).then(function () { b.textContent = "Copied!"; });
+        navigator.clipboard.writeText(b.getAttribute("data-copy-value")).then(function () {
+          var t = b.querySelector("span") || b; t.textContent = "Copied!";
+        });
       });
     </script>`;
 

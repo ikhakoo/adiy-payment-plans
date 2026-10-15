@@ -58,3 +58,122 @@ export function specForOrder<T extends SpecRow>(lines: OrderLine[], specs: T[]) 
   }
   return null;
 }
+
+// ---------------------------------------------------------------- page layout (Figma "resources")
+
+export type LayoutSection = Exclude<ResourceSectionKey, "HERO">;
+
+/** One fixed item from the design. It shows as "Coming soon" until a matching resource is uploaded. */
+export interface Slot {
+  key: string;
+  section: LayoutSection;
+  title: string;
+  description: string;
+  /** Tag shown at the right of the row when the resource has no `meta` of its own. */
+  tag: string;
+  /** Resource titles that fill this slot. */
+  match: RegExp;
+  /** Fallback when no title matches: the first unused resource of this kind in the section. */
+  kind?: string;
+}
+
+export const SLOTS: Slot[] = [
+  { key: "site-prep", section: "BEFORE", title: "Site preparation checklist", description: "Get your build area ready before you start.", tag: "PDF", match: /site|prep/i },
+  { key: "footing", section: "BEFORE", title: "Footing Plan", description: "See where to place the foundation blocks for your deck.", tag: "PDF", match: /footing|foundation|block/i },
+  { key: "tools", section: "BEFORE", title: "Tools & parts checklist", description: "Check your kit contents and gather the tools you’ll need.", tag: "Checklist", match: /tool|parts|contents/i, kind: "CHECKLIST" },
+  { key: "install", section: "BUILD", title: "Installation Guide", description: "Follow the instructions to build your deck, step by step.", tag: "GUIDE", match: /install|assembly (guide|instructions|manual)/i },
+  { key: "videos", section: "BUILD", title: "Assembly videos", description: "Watch how your deck comes together, one step at a time.", tag: "VIDEOS", match: /video/i, kind: "VIDEO" },
+  { key: "steps", section: "BUILD", title: "Steps & railing instructions", description: "Find assembly instructions for your steps and railings.", tag: "GUIDE", match: /step|stair|rail/i },
+  { key: "care", section: "AFTER", title: "Care & maintenance guide", description: "Learn how to care for your deck and keep it in good condition.", tag: "Guide", match: /care|mainten|clean/i },
+  { key: "warranty", section: "AFTER", title: "Warranty documents", description: "View your deck’s warranty coverage and how to make a claim.", tag: "PDF", match: /warrant|claim/i },
+];
+
+export interface LayoutItem<T> {
+  /** The design slot this row fills, or null for an extra resource the merchant added. */
+  slot: Slot | null;
+  /** The uploaded resource, or null while it's "Coming soon". */
+  resource: T | null;
+}
+
+/**
+ * The page's three sections in the design's order: every slot is listed (filled with a matching
+ * resource or left empty), followed by the section's other resources. A slot takes the first
+ * resource of its section whose title matches, else the first unused one of its `kind`; the
+ * installation-guide slot falls back to the "Start here" guide. Also picks the hero's guide and video.
+ */
+export function pageLayout<T extends ResourceRow & { kind: string }>(sections: Record<ResourceSectionKey, T[]>) {
+  const used = new Set<string>();
+  const filled = new Map<string, T>();
+  const take = (slot: Slot, pick: (r: T) => boolean) => {
+    if (filled.has(slot.key)) return;
+    const r = sections[slot.section].find((x) => !used.has(x.id) && pick(x));
+    if (r) {
+      filled.set(slot.key, r);
+      used.add(r.id);
+    }
+  };
+  for (const slot of SLOTS) take(slot, (r) => slot.match.test(r.title));
+  for (const slot of SLOTS) if (slot.kind) take(slot, (r) => r.kind === slot.kind);
+
+  const heroGuide = sections.HERO.find((r) => r.kind !== "VIDEO") ?? null;
+  if (!filled.has("install") && heroGuide) filled.set("install", heroGuide);
+
+  const layout = {} as Record<LayoutSection, LayoutItem<T>[]>;
+  for (const section of ["BEFORE", "BUILD", "AFTER"] as const) {
+    layout[section] = [
+      ...SLOTS.filter((s) => s.section === section).map((slot) => ({ slot, resource: filled.get(slot.key) ?? null })),
+      ...sections[section].filter((r) => !used.has(r.id)).map((resource) => ({ slot: null, resource })),
+    ];
+  }
+
+  const all = [...sections.HERO, ...sections.BEFORE, ...sections.BUILD, ...sections.AFTER];
+  // "Download guide" is only ever the installation guide, never some other PDF.
+  const guide = heroGuide ?? filled.get("install") ?? null;
+  const video = sections.HERO.find((r) => r.kind === "VIDEO") ?? filled.get("videos") ?? all.find((r) => r.kind === "VIDEO") ?? null;
+  return { sections: layout, guide, video };
+}
+
+// ---------------------------------------------------------------- deck overview
+
+/** "10 × 12 ft", "10x12", "10' x 12'", "10′ × 12′ Freestanding" → { width: 10, length: 12 }. */
+export function parseDeckSize(text: string | null | undefined) {
+  const m = text?.match(/(\d+(?:\.\d+)?)\s*(?:ft|feet|['′])?\s*[x×X]\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  const width = Number(m[1]);
+  const length = Number(m[2]);
+  return width > 0 && length > 0 ? { width, length } : null;
+}
+
+export interface KitSpecFields {
+  specLabel: string | null;
+  buildTime: string | null;
+  deckSize: string | null;
+}
+
+/**
+ * What the hero spec box and the "Deck size" card show: the kit spec the merchant entered, or
+ * else what the order's line item says (its size variant, else the product title). Nothing made up.
+ */
+export function deckOverview(spec: KitSpecFields | null, line: { title: string; variantTitle: string | null } | null) {
+  const variant = line?.variantTitle && line.variantTitle !== "Default Title" ? line.variantTitle.trim() : null;
+  const dims = parseDeckSize(spec?.specLabel) ?? parseDeckSize(variant) ?? parseDeckSize(line?.title);
+  const fmt = (n: number) => String(Math.round(n * 100) / 100);
+  const dimsText = dims ? `${fmt(dims.width)} × ${fmt(dims.length)} ft` : null;
+  const area = spec?.deckSize?.trim() || (dims ? `${fmt(dims.width * dims.length)} sq ft` : null);
+  return {
+    /** For "your [size] deck kit" in the hero text. */
+    size: dimsText ?? variant,
+    /** Big number on the Deck size card, and the line under it. */
+    area: area ?? dimsText ?? variant ?? line?.title ?? null,
+    areaSub: area ? (dimsText ?? variant) : null,
+    specLabel: spec?.specLabel?.trim() || (dims ? `${fmt(dims.width)}′ × ${fmt(dims.length)}′` : variant) || line?.title || null,
+    buildTime: spec?.buildTime?.trim() || null,
+  };
+}
+
+/** The "Readiness" card, from where the deck is in its journey (tracking.ts's DeckStep). */
+export function readiness(step: "production" | "packing" | "shipped" | "delivered") {
+  if (step === "delivered") return { stage: "03", label: "Ready to build", percent: 75 };
+  if (step === "shipped") return { stage: "02", label: "Arriving soon", percent: 50 };
+  return { stage: "01", label: "Ready to prep", percent: 25 };
+}

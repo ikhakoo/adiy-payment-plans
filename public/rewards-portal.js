@@ -41,22 +41,28 @@
   });
 })();
 
-// Referral card (portal home): copy / share the customer's link.
+// Referral card (Refer a Friend): copy / share the customer's link.
 (function () {
-  var copy = document.getElementById("rw-ref-copy");
   var share = document.getElementById("rw-ref-share");
   var link = document.getElementById("rw-ref-link");
   if (!link) return;
-  if (copy) {
+  // Buttons keep their icon: only the text label (a <span> when present) changes.
+  function setLabel(btn, text) {
+    var span = btn.querySelector("span");
+    (span || btn).textContent = text;
+  }
+  var copies = Array.prototype.slice.call(document.querySelectorAll("#rw-ref-copy, [data-rw-copy]"));
+  copies.forEach(function (copy) {
+    var label = copy.getAttribute("data-label") || "Copy link";
     copy.addEventListener("click", function (e) {
       e.preventDefault();
       (navigator.clipboard ? navigator.clipboard.writeText(link.value) : Promise.reject()).then(
-        function () { copy.textContent = "Copied!"; },
-        function () { link.select(); document.execCommand("copy"); copy.textContent = "Copied!"; },
+        function () { setLabel(copy, "Copied!"); },
+        function () { link.select(); document.execCommand("copy"); setLabel(copy, "Copied!"); },
       );
-      setTimeout(function () { copy.textContent = "Copy link"; }, 2000);
+      setTimeout(function () { setLabel(copy, label); }, 2000);
     });
-  }
+  });
   if (share) {
     if (!navigator.share) share.style.display = "none";
     share.addEventListener("click", function (e) {

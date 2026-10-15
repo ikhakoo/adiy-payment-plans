@@ -1,6 +1,20 @@
-// Help & Support: the new-request form. Photos are downscaled in the browser (max 1600px JPEG) so
-// requests stay small through the app proxy, then sent as base64 in one JSON POST.
+// Help & Support. The ticket filter ("Filtered: Open Tickets"), topic cards that open the request
+// form with their topic picked, and the new-request form itself. Photos are downscaled in the
+// browser (max 1600px JPEG) so requests stay small through the app proxy, then sent as base64 in
+// one JSON POST. Without Gorgias (cfg.mailto) the form opens an email to support instead.
 (function () {
+  var filter = document.querySelector("[data-sup-filter]");
+  if (filter) {
+    filter.addEventListener("click", function () {
+      var box = filter.closest(".sup-reqs");
+      var all = box.getAttribute("data-view") !== "all";
+      box.setAttribute("data-view", all ? "all" : "open");
+      filter.textContent = all
+        ? "Showing: All Tickets (" + filter.getAttribute("data-all") + ")"
+        : "Filtered: Open Tickets (" + filter.getAttribute("data-open") + ")";
+    });
+  }
+
   var form = document.getElementById("sp-form");
   if (!form) return;
   var cfg = JSON.parse(form.getAttribute("data-config"));
@@ -31,6 +45,22 @@
     if (e.target && e.target.name === "topic") syncHint();
   });
   syncHint();
+
+  // "View delivery help" / "Report an issue": pick the topic and go to the form without a reload.
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest("[data-sup-topic]");
+    if (!a) return;
+    var radio = form.querySelector('input[name="topic"][value="' + a.getAttribute("data-sup-topic") + '"]');
+    if (!radio) return;
+    e.preventDefault();
+    radio.checked = true;
+    syncHint();
+    if (window.history && history.replaceState) history.replaceState(null, "", a.getAttribute("href"));
+    var target = document.getElementById("new-request");
+    if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    var next = order || document.getElementById("sp-message");
+    if (next) setTimeout(function () { next.focus({ preventScroll: true }); }, 400);
+  });
 
   if (cfg.focus) {
     var target = document.getElementById("new-request");
@@ -121,6 +151,15 @@
     if (!t) return show("Please choose a topic.");
     if (cfg.needsOrder[t] && !orderId) return show("Please select your order.");
     if (message.length < cfg.minMessage) return show("Please tell us a little more about how we can help.");
+
+    if (cfg.mailto) {
+      // Same subject the help desk would use: "Missing or damaged parts · Order #1234".
+      var name = orderId ? cfg.orderNames[orderId] : "";
+      var subject = cfg.labels[t] + (name ? " · Order " + (name.charAt(0) === "#" ? "" : "#") + name : "");
+      var body = (name ? "Order: " + name + "\n\n" : "") + message + "\n\n— Sent from the A-DIY Hub";
+      window.location.href = "mailto:" + cfg.mailto + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
+      return show("Your email app should open with your request filled in — press send there. If nothing opened, email " + cfg.mailto + ".", true);
+    }
 
     btn.disabled = true;
     show("Sending your request…", true);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carrierTrackingUrl, deckProgress, partsGuarantee, workingDays, type TrackableOrder } from "./tracking";
+import { carrierTrackingUrl, deckProgress, orderUpdates, partsGuarantee, workingDays, type TrackableOrder } from "./tracking";
 
 // Mon 2026-10-05 10:00 ET
 const ordered = "2026-10-05T14:00:00Z";
@@ -68,5 +68,35 @@ describe("carrier and guarantee", () => {
     expect(g).toMatchObject({ active: true, daysLeft: 14, activeUntil: at("2026-10-28T14:42:00Z") });
     expect(partsGuarantee(at("2026-10-14T14:42:00Z"), at("2026-11-01T00:00:00Z"))?.active).toBe(false);
     expect(partsGuarantee(null)).toBeNull();
+  });
+});
+
+describe("orderUpdates", () => {
+  it("starts with the order going into production", () => {
+    const o = order();
+    const u = orderUpdates(o, deckProgress(o, at("2026-10-06T15:00:00Z")));
+    expect(u).toHaveLength(1);
+    expect(u[0]).toMatchObject({ kind: "production", at: at(ordered) });
+  });
+
+  it("puts the undated packing step on top while we pack", () => {
+    const o = order({ displayFulfillmentStatus: "IN_PROGRESS" });
+    const u = orderUpdates(o, deckProgress(o, at("2026-10-09T15:00:00Z")));
+    expect(u.map((x) => x.kind)).toEqual(["packing", "production"]);
+    expect(u[0].at).toBeNull();
+  });
+
+  it("uses Shopify's carrier events, newest first, and fills in shipped/delivered from the fulfillment", () => {
+    const f = {
+      displayStatus: "DELIVERED", createdAt: "2026-10-09T15:00:00Z", inTransitAt: "2026-10-10T12:00:00Z", deliveredAt: "2026-10-14T14:42:00Z", trackingInfo: [],
+      events: { nodes: [
+        { status: "LABEL_PRINTED", happenedAt: "2026-10-09T16:00:00Z", message: null },
+        { status: "OUT_FOR_DELIVERY", happenedAt: "2026-10-14T12:00:00Z", message: null },
+      ] },
+    };
+    const o = order({ displayFulfillmentStatus: "FULFILLED", fulfillments: [f] });
+    const u = orderUpdates(o, deckProgress(o));
+    expect(u.map((x) => x.kind)).toEqual(["delivered", "out", "shipped", "packing", "production"]);
+    expect(u[2].at).toEqual(at("2026-10-10T12:00:00Z"));
   });
 });

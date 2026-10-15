@@ -3,7 +3,7 @@ import db from "../db.server";
 import { rewardTypes } from "../lib/rewards.server";
 import { esc, moneyRange } from "../lib/portal.server";
 import { hubContext, renderHub } from "../lib/hub.server";
-import { rewardsLayout, sentSubmissions, tierAction } from "../lib/hub-rewards.server";
+import { rewardIcon, rewardsLayout, rwIcon, sentSubmissions, tierBlock } from "../lib/hub-rewards.server";
 
 // GET /apps/hub/rewards — Rewards › Earn rewards: the ways to earn, and where each order stands.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -16,26 +16,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.googleConnection.findUnique({ where: { shop: ctx.shop } }),
   ]);
   const uploadsOpen = Boolean(conn?.sharedDriveId);
-  const orders = ctx.rewardOrders;
 
   const tiers = types
     .map((t, i) => {
-      // One order: a single button. Several: one line per order so each can be submitted separately.
-      const actions = !orders.length
-        ? `<a class="btn disabled">Available once your deck is delivered</a>`
-        : orders.length === 1
-          ? tierAction(ctx, orders[0], t, submissions, uploadsOpen)
-          : orders
-              .map((o) => `<div class="order-status"><span class="label">Order ${esc(o.name)}</span>${tierAction(ctx, o, t, submissions, uploadsOpen)}</div>`)
-              .join("");
-      return `<div class="tier">
-          <div>
-            <h3 class="h2" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${esc(t.name)}${i === 0 ? '<span class="pill gold">Top reward</span>' : ""}</h3>
-            <p class="muted" style="font-size:14px;margin:0">${esc(t.description)}</p>
+      const { status, cta } = tierBlock(ctx, ctx.rewardOrders, t, submissions, uploadsOpen);
+      return `<div class="rw-tier">
+          <span class="rw-tile">${rewardIcon(t, i)}</span>
+          <div class="rw-tier-text">
+            <h3 class="h3">${esc(t.name)}${i === 0 ? '<span class="rw-top">Top reward</span>' : ""}</h3>
+            <p>${esc(t.description)}</p>
+            ${status}
           </div>
-          <div class="amount"><b>${moneyRange(String(t.minAmount), String(t.maxAmount))}</b><span class="label">Amazon gift card</span></div>
-          <div class="actions">${actions}</div>
-        </div>`;
+          <div class="rw-tier-side">
+            <b class="rw-amount">${moneyRange(String(t.minAmount), String(t.maxAmount))}</b>
+            <span class="label">Amazon gift card</span>
+            <div class="rw-tier-cta">${cta}</div>
+          </div>
+        </div>
+        <div class="rw-rule" aria-hidden="true"></div>`;
     })
     .join("");
 
@@ -43,12 +41,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const content = `
     ${justSubmitted ? `<div class="notice"><strong>Thanks!</strong> Your submission is in review. We'll email you once our team has looked at it.</div>` : ""}
     ${uploadsOpen ? "" : `<div class="notice warn">Uploads are paused for a moment. Please check back soon.</div>`}
-    <div class="card">
-      <div class="card-head"><span class="pill mint">${types.length} ways to earn rewards</span></div>
+    <div class="card rw-tiers">
       ${tiers || `<p class="muted">There are no rewards to earn right now.</p>`}
-      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:14px;margin-top:4px">
-        <span class="muted">Amazon gift card rewards are subject to review and program terms.</span>
-        <span class="muted">Payouts in ~48 hrs</span>
+      <div class="rw-note">
+        <span>${rwIcon("verified")}<span>Amazon gift card rewards<br>Subject to review and program terms.</span></span>
+        <b>Payouts in ~48 hrs</b>
       </div>
     </div>`;
 
