@@ -57,6 +57,8 @@ describe("deckProgress", () => {
     const fulfillment = { displayStatus: "IN_TRANSIT", createdAt: "2026-10-09T15:00:00Z", inTransitAt: "2026-10-10T12:00:00Z", deliveredAt: null, trackingInfo: [] };
     const shipped = order({ displayFulfillmentStatus: "FULFILLED", fulfillments: [fulfillment] });
     expect(deckProgress(shipped, at("2026-10-12T15:00:00Z"))).toMatchObject({ step: "shipped", shippedAt: at("2026-10-10T12:00:00Z") });
+    // Even when it's fulfilled inside the first 72 hours.
+    expect(deckProgress(shipped, at("2026-10-06T15:00:00Z"))).toMatchObject({ step: "shipped", percent: 100 });
 
     const delivered = order({
       displayFulfillmentStatus: "FULFILLED",

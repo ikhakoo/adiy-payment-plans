@@ -66,7 +66,10 @@ export interface DeckProgress {
   shippedAt: Date | null;
 }
 
-/** The theme's stage rules, plus "delivered" from Shopify (the theme hands off to the carrier instead). */
+/**
+ * The theme's stage rules, plus "delivered" from Shopify (the theme hands off to the carrier instead).
+ * Unlike the theme, a fulfilled order shows as shipped straight away, even inside the first 72 hours.
+ */
 export function deckProgress(order: TrackableOrder, now = new Date()): DeckProgress {
   const delivered = order.fulfillments.find((f) => f.displayStatus === "DELIVERED" || f.deliveredAt);
   const shipped = order.fulfillments.find((f) => f.inTransitAt) ?? order.fulfillments[0];
@@ -74,13 +77,14 @@ export function deckProgress(order: TrackableOrder, now = new Date()): DeckProgr
   const shippedAt = shipped ? new Date(shipped.inTransitAt ?? shipped.createdAt) : null;
   if (deliveredAt) return { step: "delivered", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
 
+  const status = order.displayFulfillmentStatus.toUpperCase();
+  if (status === "FULFILLED") return { step: "shipped", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
+
   // Which 24-hour stretch of weekday time the order is in: 0 for its first 24 hours, and so on.
   const day = Math.floor(businessHours(new Date(order.createdAt), now) / 24);
-  const status = order.displayFulfillmentStatus.toUpperCase();
-  const underway = status === "IN_PROGRESS" || status === "FULFILLED" || status === "PARTIALLY_FULFILLED";
+  const underway = status === "IN_PROGRESS" || status === "PARTIALLY_FULFILLED";
 
   if (day >= 3 && underway) {
-    if (status === "FULFILLED") return { step: "shipped", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
     const packingDay = day - 3;
     const percent = packingDay === 0 ? 71 : packingDay === 1 ? 85 : packingDay === 2 ? 95 : 100;
     return { step: "packing", percent, checklistDone: 7, eta: "Estimate: 3 to 4 business days", deliveredAt, shippedAt };
