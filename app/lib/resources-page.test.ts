@@ -2,7 +2,7 @@
 // always show; the hero buttons and rows become links only when a resource has been uploaded.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ resources: [] as unknown[], specs: [] as unknown[] }));
+const db = vi.hoisted(() => ({ resources: [] as unknown[], specs: [] as unknown[], variants: [] as unknown[], variantId: null as string | null }));
 vi.mock("../shopify.server", () => ({ authenticate: {} }));
 vi.mock("../db.server", () => ({
   default: {
@@ -14,7 +14,10 @@ vi.mock("./hub.server", async (orig) => ({
   ...((await orig()) as object),
   hubContext: async () => ({
     page: null,
-    ctx: { shop: "s", base: "/apps/hub", url: (p = "") => `/apps/hub${p}`, liquid: (h: string) => new Response(h), customerName: "Ann", testMode: false },
+    ctx: {
+      admin: { graphql: async () => Response.json({ data: { nodes: db.variants } }) },
+      shop: "s",
+      base: "/apps/hub", url: (p = "") => `/apps/hub${p}`, liquid: (h: string) => new Response(h), customerName: "Ann", testMode: false },
   }),
 }));
 const P = "gid://shopify/Product/1";
@@ -26,9 +29,15 @@ vi.mock("./orders.server", async (orig) => {
     createdAt: new Date().toISOString(),
     displayFulfillmentStatus: "UNFULFILLED",
     fulfillments: [],
-    lineItems: [{ title: "Deck Kit", variantTitle: "16 × 20 ft", quantity: 1, image: null, productId: P, variantId: null }],
+    lineItems: [{ title: "Deck Kit", variantTitle: "16 × 20 ft", quantity: 1, image: null, productId: P, variantId: null as string | null }],
   };
-  return { ...((await orig()) as object), selectedOrder: async () => ({ orders: [order], order }) };
+  return {
+    ...((await orig()) as object),
+    selectedOrder: async () => {
+      order.lineItems[0].variantId = db.variantId;
+      return { orders: [order], order };
+    },
+  };
 });
 
 let n = 0;
@@ -46,6 +55,8 @@ describe("Build Resources page", () => {
   beforeEach(() => {
     db.resources = [];
     db.specs = [];
+    db.variants = [];
+    db.variantId = null;
   });
 
   it("shows every design item and inert hero buttons with the design's labels before anything is uploaded", async () => {
@@ -77,5 +88,36 @@ describe("Build Resources page", () => {
     expect(html).not.toContain("aria-disabled=\"true\">" + "<svg");
     expect(html).toMatch(/<a class="res-item" href="https:\/\/cdn\/full.pdf"[^>]*>.*Installation Guide.*<span class="res-tag">24 pgs<\/span>/s);
     expect(html).toContain("<span>Estimated build</span><b>2 - 3 Days (2 adults)</b>");
+  });
+
+  it("uses the ordered size's metafields ahead of the editor's uploads", async () => {
+    const V = "gid://shopify/ProductVariant/7";
+    db.variantId = V;
+    const mf = (value: string, url?: string) => ({ value, updatedAt: "2026-10-01T00:00:00Z", reference: url ? { url } : null });
+    db.variants = [
+      {
+        id: V,
+        product: { id: P },
+        manual: mf("gid://shopify/GenericFile/1", "https://cdn/12x28_manual.pdf"),
+        footing: mf("gid://shopify/GenericFile/2", "https://cdn/12x28_footing.pdf"),
+        video: mf("https://youtu.be/abc"),
+        app3d: mf("https://app.easemble.com/l/xyz"),
+      },
+    ];
+    db.resources = [
+      resource("HERO", "PDF", "Installation guide", "https://cdn/old-guide.pdf"),
+      resource("BUILD", "PDF", "Installation Guide", "https://cdn/old-full.pdf"),
+      resource("BEFORE", "PDF", "Site preparation checklist", "https://cdn/site.pdf"),
+    ];
+    const html = await render();
+    expect(html).toMatch(/<a class="res-btn white" href="https:\/\/cdn\/12x28_manual.pdf"[^>]*>.*Download guide/s);
+    expect(html).toMatch(/<a class="res-btn ghost" href="https:\/\/youtu.be\/abc"[^>]*>.*Watch assembly video/s);
+    expect(html).toMatch(/<a class="res-item" href="https:\/\/cdn\/12x28_manual.pdf"[^>]*>.*Installation Guide/s);
+    expect(html).toMatch(/<a class="res-item" href="https:\/\/cdn\/12x28_footing.pdf"[^>]*>.*Footing Plan/s);
+    expect(html).toMatch(/<a class="res-item" href="https:\/\/youtu.be\/abc"[^>]*>.*Assembly videos/s);
+    expect(html).toMatch(/<a class="res-item" href="https:\/\/app.easemble.com\/l\/xyz"[^>]*>.*3D instructional app/s);
+    // Editor uploads still fill the slots the metafields don't cover.
+    expect(html).toMatch(/<a class="res-item" href="https:\/\/cdn\/site.pdf"/);
+    expect(html).not.toContain("old-guide.pdf");
   });
 });

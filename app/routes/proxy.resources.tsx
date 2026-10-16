@@ -112,7 +112,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const { sections, spec, specLine } = await orderResources(ctx.shop, order.lineItems);
+  const { sections, spec, specLine } = await orderResources(ctx.shop, order.lineItems, ctx.admin?.graphql);
   const { sections: layout, guide, video } = pageLayout(sections);
   // The kit the page is about: the line with a spec, else the order's first line.
   const line = specLine ?? mainLine(order);

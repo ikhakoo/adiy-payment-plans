@@ -19,7 +19,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     sentSubmissions(ctx),
   ]);
   // "Updated N days ago" beside View resources: the newest of this kit's build resources.
-  const resourcesNote = order ? await resourcesUpdated(ctx.shop, order.lineItems) : null;
+  const resourcesNote = order ? await resourcesUpdated(ctx.shop, order.lineItems, ctx.admin?.graphql) : null;
   const topReward = types.reduce((max, t) => Math.max(max, Number(t.maxAmount)), 0);
   const possible = types.length * Math.max(1, ctx.rewardOrders.length);
   const sent = submissions.filter((s) => s.status !== "REJECTED").length;

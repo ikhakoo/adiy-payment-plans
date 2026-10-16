@@ -59,6 +59,60 @@ export function specForOrder<T extends SpecRow>(lines: OrderLine[], specs: T[]) 
   return null;
 }
 
+// ---------------------------------------------------------------- size metafields
+
+/** A deck size's build files, as set on the variant in Shopify (namespace "custom"). */
+export interface VariantFiles {
+  productId: string;
+  variantId: string;
+  /** custom.product_manuals_pdf */
+  manual: { url: string; updatedAt: string } | null;
+  /** custom.footing_diagrams_pdf */
+  footing: { url: string; updatedAt: string } | null;
+  /** custom.video_links */
+  video: { url: string; updatedAt: string } | null;
+  /** custom.3d_app_links */
+  app3d: { url: string; updatedAt: string } | null;
+}
+
+/** Resource rows (as if entered in the editor for that size) from a variant's metafields. */
+export function metafieldResources(v: VariantFiles) {
+  const row = (
+    key: string,
+    f: { url: string; updatedAt: string } | null,
+    section: ResourceSectionKey,
+    kind: "PDF" | "GUIDE" | "VIDEO" | "APP_3D",
+    title: string,
+    description: string | null,
+  ) =>
+    f && {
+      id: `mf:${v.variantId}:${key}`,
+      shop: "",
+      productId: v.productId,
+      productTitle: null,
+      variantId: v.variantId,
+      variantTitle: null,
+      section,
+      kind,
+      title,
+      description,
+      url: f.url,
+      meta: null,
+      // Ahead of anything entered in the editor for the same slot.
+      position: -1,
+      createdAt: new Date(f.updatedAt),
+      updatedAt: new Date(f.updatedAt),
+    };
+  return [
+    // The manual is both the hero's "Download guide" and the Installation Guide row.
+    row("manual-hero", v.manual, "HERO", "GUIDE", "Installation Guide", null),
+    row("manual", v.manual, "BUILD", "GUIDE", "Installation Guide", null),
+    row("footing", v.footing, "BEFORE", "PDF", "Footing Plan", null),
+    row("video", v.video, "BUILD", "VIDEO", "Assembly videos", null),
+    row("app3d", v.app3d, "BUILD", "APP_3D", "3D instructional app", "Interactive, step-by-step 3D instructions for your deck kit."),
+  ].filter((r) => !!r);
+}
+
 // ---------------------------------------------------------------- page layout (Figma "resources")
 
 export type LayoutSection = Exclude<ResourceSectionKey, "HERO">;

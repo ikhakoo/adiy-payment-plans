@@ -2,33 +2,85 @@
 // the admin editor (app.build-resources.tsx).
 import type { BuildResource, KitSpec } from "@prisma/client";
 import db from "../db.server";
-import { resourcesForOrder, specForOrder, SECTIONS, updatedAgo, type OrderLine } from "./resources";
+import { metafieldResources, resourcesForOrder, specForOrder, SECTIONS, updatedAgo, type OrderLine, type VariantFiles } from "./resources";
 
-/** Resources (by section) and kit spec for an order's line items; `line` is the line the spec belongs to. */
-export async function orderResources<L extends OrderLine>(shop: string, lines: L[]) {
+type Graphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
+
+const VARIANT_FILES = `#graphql
+  query VariantBuildFiles($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on ProductVariant {
+        id
+        product { id }
+        manual: metafield(namespace: "custom", key: "product_manuals_pdf") { ...BuildFile }
+        footing: metafield(namespace: "custom", key: "footing_diagrams_pdf") { ...BuildFile }
+        video: metafield(namespace: "custom", key: "video_links") { ...BuildFile }
+        app3d: metafield(namespace: "custom", key: "3d_app_links") { ...BuildFile }
+      }
+    }
+  }
+  fragment BuildFile on Metafield {
+    value
+    updatedAt
+    reference {
+      ... on GenericFile { url }
+      ... on MediaImage { image { url } }
+    }
+  }`;
+
+type RawFile = { value: string; updatedAt: string; reference: { url?: string | null; image?: { url: string } | null } | null } | null;
+
+/** The build files set on each ordered size's metafields. Failures leave the page on the editor's resources. */
+export async function variantFiles(graphql: Graphql, variantIds: string[]): Promise<VariantFiles[]> {
+  if (!variantIds.length) return [];
+  try {
+    const res = await graphql(VARIANT_FILES, { variables: { ids: variantIds } });
+    const json = (await res.json()) as {
+      data?: { nodes: ({ id: string; product: { id: string }; manual: RawFile; footing: RawFile; video: RawFile; app3d: RawFile } | null)[] };
+    };
+    // A file reference gives a file's URL; a URL metafield is the link itself.
+    const file = (m: RawFile) => {
+      const url = m?.reference ? (m.reference.url ?? m.reference.image?.url) : /^https?:\/\//.test(m?.value ?? "") ? m!.value : null;
+      return url && m ? { url, updatedAt: m.updatedAt } : null;
+    };
+    return (json.data?.nodes ?? [])
+      .filter((n) => n?.id)
+      .map((n) => ({ productId: n!.product.id, variantId: n!.id, manual: file(n!.manual), footing: file(n!.footing), video: file(n!.video), app3d: file(n!.app3d) }));
+  } catch (err) {
+    console.warn("build files from variant metafields failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Resources (by section) and kit spec for an order's line items; `line` is the line the spec belongs to.
+ * With `graphql`, each size's metafield files (manual, footing plan, videos, 3D app) come first.
+ */
+export async function orderResources<L extends OrderLine>(shop: string, lines: L[], graphql?: Graphql) {
   const productIds = [...new Set(lines.map((l) => l.productId).filter((id): id is string => !!id))];
   if (!productIds.length) return { sections: resourcesForOrder<BuildResource>([], []), spec: null, specLine: null as L | null };
-  const [resources, specs] = await Promise.all([
+  const variantIds = [...new Set(lines.map((l) => l.variantId).filter((id): id is string => !!id))];
+  const [resources, specs, files] = await Promise.all([
     db.buildResource.findMany({ where: { shop, productId: { in: productIds } } }),
     db.kitSpec.findMany({ where: { shop, productId: { in: productIds } } }),
+    graphql ? variantFiles(graphql, variantIds) : [],
   ]);
   const found = specForOrder<KitSpec>(lines, specs);
   return {
-    sections: resourcesForOrder(lines, resources),
+    // Metafield rows first, so they win over an editor row with the same section and title.
+    sections: resourcesForOrder(lines, [...files.flatMap(metafieldResources), ...resources] as BuildResource[]),
     spec: found?.spec ?? null,
     specLine: (found?.line as L | undefined) ?? null,
   };
 }
 
 /** "Updated N days ago" for the resources an order's customer sees, or null when there are none. */
-export async function resourcesUpdated(shop: string, lines: OrderLine[]) {
-  const { sections } = await orderResources(shop, lines);
+export async function resourcesUpdated(shop: string, lines: OrderLine[], graphql?: Graphql) {
+  const { sections } = await orderResources(shop, lines, graphql);
   return updatedAgo(SECTIONS.flatMap((s) => sections[s]));
 }
 
 // ---------------------------------------------------------------- Shopify Files uploads
-
-type Graphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 
 export type UploadKind = "FILE" | "VIDEO" | "IMAGE";
 
