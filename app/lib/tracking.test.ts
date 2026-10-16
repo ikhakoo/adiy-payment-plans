@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carrierTrackingUrl, deckProgress, orderUpdates, partsGuarantee, workingDays, type TrackableOrder } from "./tracking";
+import { carrierTrackingUrl, deckProgress, orderUpdates, partsGuarantee, businessHours, type TrackableOrder } from "./tracking";
 
 // Mon 2026-10-05 10:00 ET
 const ordered = "2026-10-05T14:00:00Z";
@@ -12,38 +12,45 @@ const order = (over: Partial<TrackableOrder> = {}): TrackableOrder => ({
   ...over,
 });
 
-describe("workingDays", () => {
-  it("counts both ends and skips weekends", () => {
-    expect(workingDays(at(ordered), at("2026-10-05T20:00:00Z"))).toBe(1);
-    expect(workingDays(at(ordered), at("2026-10-09T20:00:00Z"))).toBe(5); // Mon–Fri
-    expect(workingDays(at(ordered), at("2026-10-12T15:00:00Z"))).toBe(6); // + next Monday
+describe("businessHours", () => {
+  it("counts elapsed hours", () => {
+    expect(businessHours(at(ordered), at("2026-10-05T20:00:00Z"))).toBe(6);
+    expect(businessHours(at(ordered), at("2026-10-07T14:00:00Z"))).toBe(48);
   });
 
-  it("uses US Eastern dates", () => {
-    // 02:00 UTC Tuesday is still Monday evening in New York.
-    expect(workingDays(at(ordered), at("2026-10-06T02:00:00Z"))).toBe(1);
+  it("skips weekends by US Eastern dates", () => {
+    // Fri 10:00 ET → Mon 10:00 ET is 14 hours of Friday plus 10 of Monday.
+    expect(businessHours(at("2026-10-09T14:00:00Z"), at("2026-10-12T14:00:00Z"))).toBe(24);
+    // An order placed on Saturday starts counting at Monday midnight ET.
+    expect(businessHours(at("2026-10-10T16:00:00Z"), at("2026-10-12T14:00:00Z"))).toBe(10);
   });
 });
 
 describe("deckProgress", () => {
-  it("paces production by business day like the storefront tracker", () => {
-    expect(deckProgress(order(), at("2026-10-05T20:00:00Z"))).toMatchObject({ step: "production", percent: 22, checklistDone: 3 });
-    expect(deckProgress(order(), at("2026-10-06T15:00:00Z"))).toMatchObject({ step: "production", percent: 45, checklistDone: 4 });
-    expect(deckProgress(order(), at("2026-10-07T15:00:00Z"))).toMatchObject({ step: "production", percent: 60, checklistDone: 6 });
-    expect(deckProgress(order(), at("2026-10-08T15:00:00Z"))).toMatchObject({ step: "production", percent: 85, checklistDone: 7 });
+  it("paces production by 24 weekday hours like the storefront tracker", () => {
+    expect(deckProgress(order(), at("2026-10-06T13:59:00Z"))).toMatchObject({ step: "production", percent: 22, checklistDone: 3 });
+    expect(deckProgress(order(), at("2026-10-06T14:00:00Z"))).toMatchObject({ step: "production", percent: 45, checklistDone: 5 });
+    expect(deckProgress(order(), at("2026-10-07T13:59:00Z"))).toMatchObject({ step: "production", percent: 45, checklistDone: 5 });
+    expect(deckProgress(order(), at("2026-10-07T14:00:00Z"))).toMatchObject({ step: "production", percent: 62, checklistDone: 7 });
+  });
+
+  it("doesn't advance at midnight", () => {
+    // Ordered Mon 16:00 ET; Tue 09:00 ET is only 17 hours later.
+    const late = order({ createdAt: "2026-10-05T20:00:00Z" });
+    expect(deckProgress(late, at("2026-10-06T13:00:00Z"))).toMatchObject({ percent: 22, checklistDone: 3 });
   });
 
   it("stays in production until fulfillment is under way", () => {
     expect(deckProgress(order(), at("2026-10-12T15:00:00Z")).step).toBe("production");
   });
 
-  it("moves to packing after 3 business days once fulfillment starts", () => {
+  it("moves to packing after 72 weekday hours once fulfillment starts", () => {
     const o = order({ displayFulfillmentStatus: "IN_PROGRESS" });
-    expect(deckProgress(o, at("2026-10-07T15:00:00Z")).step).toBe("production");
-    expect(deckProgress(o, at("2026-10-08T15:00:00Z"))).toMatchObject({ step: "packing", percent: 85 });
-    expect(deckProgress(o, at("2026-10-09T15:00:00Z"))).toMatchObject({ step: "packing", percent: 90 });
-    expect(deckProgress(o, at("2026-10-12T15:00:00Z"))).toMatchObject({ step: "packing", percent: 95 });
-    expect(deckProgress(o, at("2026-10-13T15:00:00Z"))).toMatchObject({ step: "packing", percent: 100 });
+    expect(deckProgress(o, at("2026-10-08T13:59:00Z")).step).toBe("production");
+    expect(deckProgress(o, at("2026-10-08T14:00:00Z"))).toMatchObject({ step: "packing", percent: 71 });
+    expect(deckProgress(o, at("2026-10-09T14:00:00Z"))).toMatchObject({ step: "packing", percent: 85 });
+    expect(deckProgress(o, at("2026-10-12T14:00:00Z"))).toMatchObject({ step: "packing", percent: 95 });
+    expect(deckProgress(o, at("2026-10-13T14:00:00Z"))).toMatchObject({ step: "packing", percent: 100 });
   });
 
   it("is shipped once fulfilled, and delivered once Shopify says so", () => {

@@ -1,7 +1,7 @@
-// Where a deck order is in its journey. Ported from the storefront's original tracking page
-// (theme ikhakoo/adiy_noibu_v2 › sections/tracking-widget-old.liquid) so the hub keeps its pace:
-// progress through production is paced by business days since the order (US Eastern), packing
-// starts once Shopify fulfillment is under way, and a fulfilled order is with the LTL carrier.
+// Where a deck order is in its journey. Paced like the storefront's tracking page
+// (theme ikhakoo/adiy_noibu_v2 › sections/tracking-widget.liquid), but by hours rather than dates:
+// production moves on every 24 weekday hours (US Eastern) since the order, packing starts once
+// Shopify fulfillment is under way, and a fulfilled order is with the LTL carrier.
 
 export type DeckStep = "production" | "packing" | "shipped" | "delivered";
 
@@ -21,19 +21,27 @@ export interface TrackableOrder {
 }
 
 const TZ = "America/New_York";
-const dayKey = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d); // YYYY-MM-DD
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+const wallClock = new Intl.DateTimeFormat("en-US", {
+  timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+});
+/** The US Eastern wall-clock time of `d`, as if it were UTC, so whole days line up with ET midnights. */
+function eastern(d: Date) {
+  const p = Object.fromEntries(wallClock.formatToParts(d).map((x) => [x.type, Number(x.value)]));
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+}
 
-/** Weekdays from `start` to `end`, both days included, by US Eastern calendar dates. */
-export function workingDays(start: Date, end: Date) {
-  const cur = new Date(`${dayKey(start)}T00:00:00Z`);
-  const last = new Date(`${dayKey(end)}T00:00:00Z`);
-  let count = 0;
-  while (cur <= last) {
-    const dow = cur.getUTCDay();
-    if (dow !== 0 && dow !== 6) count++;
-    cur.setUTCDate(cur.getUTCDate() + 1);
+/** Hours from `start` to `end` that fall on weekdays (Mon–Fri, US Eastern). */
+export function businessHours(start: Date, end: Date) {
+  const from = eastern(start);
+  const to = eastern(end);
+  let ms = 0;
+  for (let day = Math.floor(from / DAY) * DAY; day < to; day += DAY) {
+    const dow = new Date(day).getUTCDay();
+    if (dow !== 0 && dow !== 6) ms += Math.max(0, Math.min(to, day + DAY) - Math.max(from, day));
   }
-  return count;
+  return ms / HOUR;
 }
 
 export const PRODUCTION_CHECKLIST = [
@@ -66,18 +74,18 @@ export function deckProgress(order: TrackableOrder, now = new Date()): DeckProgr
   const shippedAt = shipped ? new Date(shipped.inTransitAt ?? shipped.createdAt) : null;
   if (deliveredAt) return { step: "delivered", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
 
-  const days = workingDays(new Date(order.createdAt), now);
+  // Which 24-hour stretch of weekday time the order is in: 0 for its first 24 hours, and so on.
+  const day = Math.floor(businessHours(new Date(order.createdAt), now) / 24);
   const status = order.displayFulfillmentStatus.toUpperCase();
   const underway = status === "IN_PROGRESS" || status === "FULFILLED" || status === "PARTIALLY_FULFILLED";
 
-  if (days > 3 && underway) {
+  if (day >= 3 && underway) {
     if (status === "FULFILLED") return { step: "shipped", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
-    const packingDays = days - 3;
-    const percent = packingDays <= 1 ? 85 : packingDays === 2 ? 90 : packingDays === 3 ? 95 : 100;
+    const packingDay = day - 3;
+    const percent = packingDay === 0 ? 71 : packingDay === 1 ? 85 : packingDay === 2 ? 95 : 100;
     return { step: "packing", percent, checklistDone: 7, eta: "Estimate: 3 to 4 business days", deliveredAt, shippedAt };
   }
-  // Still with us after 3 days but not yet being fulfilled: the build is done, waiting to pack.
-  const [percent, checklistDone] = days <= 1 ? [22, 3] : days === 2 ? [45, 4] : days === 3 ? [60, 6] : [85, 7];
+  const [percent, checklistDone] = day === 0 ? [22, 3] : day === 1 ? [45, 5] : [62, 7];
   return { step: "production", percent, checklistDone, eta: "Estimated: 3 business days", deliveredAt, shippedAt };
 }
 
