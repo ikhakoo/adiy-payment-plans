@@ -61,9 +61,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     p.step === "delivered"
       ? `<span class="trk-chip-status ok">${GLYPH.checkCircle}Confirmed</span>`
       : p.step === "shipped"
-        ? `<span class="trk-chip-status">In transit</span>`
+        ? `<span class="trk-chip-status">${p.delivery ? esc(p.delivery.label) : "In transit"}</span>`
         : `<span class="trk-chip-status warn">${p.percent}% complete</span>`;
 
+  const bar = percentBar(p, order);
   const body = `
     <div class="page-head trk-head">
       <div>
@@ -82,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         </div>
         ${withCarrier ? `<a class="trk-top-btn" href="${esc(liveTrackingUrl(order))}" target="_blank" rel="noopener">${GLYPH.receipt}Track shipment live</a>` : ""}
       </div>
-      ${p.step === "production" || p.step === "packing" ? `<div class="trk-percent">${percentBar(p)}</div>` : ""}
+      ${bar ? `<div class="trk-percent">${bar}</div>` : ""}
       ${progressLine(order, p)}
       ${carrierCards(order, p)}
       ${updatesTimeline(order, p)}

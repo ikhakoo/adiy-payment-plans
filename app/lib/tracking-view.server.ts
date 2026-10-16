@@ -1,7 +1,7 @@
 // HTML for an order's progress, shared by Track My Deck and the Overview.
 import { esc } from "./portal.server";
 import type { HubOrder } from "./orders.server";
-import { carrierTrackingUrl, orderUpdates, PRODUCTION_CHECKLIST, type DeckProgress, type DeckStep, type UpdateKind } from "./tracking";
+import { carrierFor, carrierTrackingUrl, deliveryWindow, orderUpdates, PRODUCTION_CHECKLIST, type DeckProgress, type DeckStep, type UpdateKind } from "./tracking";
 
 const ORDER: DeckStep[] = ["production", "packing", "shipped", "delivered"];
 
@@ -109,9 +109,14 @@ function stepWhen(order: HubOrder, p: DeckProgress, i: number, state: StepState)
   }
   if (i === 2) {
     if (state === "todo") return p.step === "packing" ? "Up next" : "Not yet shipped";
+    if (state === "current" && p.delivery) {
+      return p.shippedAt ? `${p.delivery.label} · Shipped ${fmtShort(p.shippedAt)}` : p.delivery.label;
+    }
     return p.shippedAt ? `${p.step === "delivered" ? "Shipped" : "In transit"} ${fmtShort(p.shippedAt)}` : "In transit";
   }
   if (p.deliveredAt) return `Delivered ${fmtShort(p.deliveredAt)} · ${fmtTime(p.deliveredAt)}`;
+  const window = deliveryWindow(carrierFor(order));
+  if (window) return `Scheduled ${window}`;
   const eta = order.fulfillments.find((f) => f.estimatedDeliveryAt)?.estimatedDeliveryAt;
   return eta ? `Estimated ${fmtShort(eta)}` : "Not yet delivered";
 }
@@ -149,8 +154,17 @@ export function progressLine(order: HubOrder, p: DeckProgress) {
   }).join("")}</ol>`;
 }
 
-/** Thin bar + percentage while the deck is still with us (production and packing). */
-export function percentBar(p: DeckProgress) {
+/**
+ * Thin bar + percentage while the deck is still with us (production and packing), then the carrier's
+ * progress ("67% of the way to you · At your local terminal") until it's delivered.
+ */
+export function percentBar(p: DeckProgress, order?: HubOrder) {
+  if (p.step === "shipped" && p.delivery) {
+    const window = order ? deliveryWindow(carrierFor(order)) : null;
+    return `<div class="track-percent"><b>${p.percent}%</b> <span class="muted">of the way to you · ${esc(p.delivery.label)}</span>
+    ${window ? `<span class="pill mint dot">Delivery ${esc(window)}</span>` : ""}</div>
+    <div class="meter" style="height:8px"><span style="width:${Math.max(4, p.percent)}%"></span></div>`;
+  }
   if (p.step !== "production" && p.step !== "packing") return "";
   return `<div class="track-percent"><b>${p.percent}%</b> <span class="muted">of your deck is completed.</span>
     ${p.eta ? `<span class="pill mint dot">${esc(p.eta)}</span>` : ""}</div>
@@ -162,13 +176,21 @@ export function shopifyTracking(order: HubOrder) {
   return order.fulfillments.flatMap((f) => f.trackingInfo).filter((t) => t.number || t.url);
 }
 
-/** Where to follow the shipment: Shopify's tracking link if it has one, else the LTL carrier's page. */
+/** The carrier and tracking number to show: the carrier's own record first, then Shopify's. */
+function trackingRef(order: HubOrder) {
+  const c = carrierFor(order);
+  if (c?.trackingNumber) return { company: c.carrier, number: c.trackingNumber, url: c.trackingUrl };
+  const t = shopifyTracking(order)[0];
+  return t ? { ...t, company: t.company === "Other" ? null : t.company } : undefined;
+}
+
+/** Where to follow the shipment: the carrier's tracking link, else Shopify's, else the LTL carrier's page by order number. */
 export const liveTrackingUrl = (order: HubOrder) =>
-  shopifyTracking(order).find((t) => t.url)?.url ?? carrierTrackingUrl(order.name);
+  carrierFor(order)?.trackingUrl ?? shopifyTracking(order).find((t) => t.url)?.url ?? carrierTrackingUrl(order.name);
 
 /** Overview subtitle under "Your deck's progress": tracking ID and carrier, or an honest note before shipping. */
 export function carrierLine(order: HubOrder, p: DeckProgress) {
-  const t = shopifyTracking(order)[0];
+  const t = trackingRef(order);
   const carrier = t?.company ?? "LTL freight";
   if (p.step !== "shipped" && p.step !== "delivered") return `Order ${esc(orderNo(order.name))} · Tracking ID available once your deck ships`;
   return t?.number
@@ -179,9 +201,11 @@ export function carrierLine(order: HubOrder, p: DeckProgress) {
 /** Track My Deck: the Carrier & Tracking Details and Delivery Confirmation cards, at every stage. */
 export function carrierCards(order: HubOrder, p: DeckProgress) {
   const shipped = p.step === "shipped" || p.step === "delivered";
-  const t = shopifyTracking(order)[0];
+  const t = trackingRef(order);
   const live = liveTrackingUrl(order);
   const eta = order.fulfillments.find((f) => f.estimatedDeliveryAt)?.estimatedDeliveryAt;
+  const c = carrierFor(order);
+  const window = deliveryWindow(c);
 
   const carrier = shipped
     ? `<div class="label">Carrier &amp; tracking details</div>
@@ -196,13 +220,15 @@ export function carrierCards(order: HubOrder, p: DeckProgress) {
   const delivery = p.deliveredAt
     ? `<div class="label">Delivery confirmation</div>
         <div class="trk-info-big">${fmtStamp(p.deliveredAt)}</div>
-        <p class="trk-info-text">Your carrier has confirmed delivery to your property.</p>
+        <p class="trk-info-text">Your carrier has confirmed delivery to your property${c?.signedBy ? `, signed for by ${esc(c.signedBy)}` : ""}.</p>
         <a class="trk-link" href="${esc(live)}" target="_blank" rel="noopener">${GLYPH.camera}<span>View delivery record</span></a>`
     : `<div class="label">Delivery confirmation</div>
-        <div class="trk-info-big">${shipped ? (eta ? `Estimated ${esc(fmtShort(eta))}` : "On its way") : "Not yet delivered"}</div>
+        <div class="trk-info-big">${shipped ? (window ? esc(window) : eta ? `Estimated ${esc(fmtShort(eta))}` : p.delivery?.step === 0 ? "Waiting for pickup" : "On its way") : "Not yet delivered"}</div>
         <p class="trk-info-text">${
           shipped
-            ? "The carrier will call you to schedule delivery once your deck reaches your local terminal."
+            ? window
+              ? "Your delivery is scheduled. The window is in your local time."
+              : "The carrier will call you to schedule delivery once your deck reaches your local terminal."
             : "Once your carrier delivers your deck, the date and time will be confirmed here."
         }</p>
         <span class="trk-pending">${GLYPH.clock}Pending delivery</span>`;
@@ -262,7 +288,7 @@ export function updatesTimeline(order: HubOrder, p: DeckProgress) {
       icon: UPDATE_ICON[u.kind],
       title: u.title,
       text: u.text,
-      when: u.at ? fmtStamp(u.at) : "In progress",
+      when: u.stamp ?? (u.at ? fmtStamp(u.at) : "In progress"),
     })),
   );
   return `<details class="trk-updates" open>

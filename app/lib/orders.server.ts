@@ -4,6 +4,8 @@ import type { Installment, PaymentPlan } from "@prisma/client";
 import db from "../db.server";
 import { esc } from "./portal.server";
 import { icon, type HubContext } from "./hub.server";
+import { carrierTracking } from "./carrier.server";
+import type { CarrierTracking } from "./tracking";
 
 const HUB_ORDERS = `#graphql
   query HubOrders($id: ID!) {
@@ -117,6 +119,8 @@ export interface HubOrder {
     variantId: string | null;
   }[];
   fulfillments: HubFulfillment[];
+  /** The LTL carrier's progress (carrier.server.ts); only loaded for the order on screen, once fulfilled. */
+  carrier?: CarrierTracking | null;
   /** Pay in 4/6/8 plan for this order, if any (from our database). */
   plan: (PaymentPlan & { installments: Installment[] }) | null;
 }
@@ -234,6 +238,7 @@ export async function selectedOrder(ctx: HubContext, request: Request) {
   const orders = await hubOrders(ctx);
   const wanted = new URL(request.url).searchParams.get("order")?.replace(/\D/g, "");
   const order = orders.find((o) => o.numericId === wanted) ?? orders[0] ?? null;
+  if (order?.fulfillments.length) order.carrier = await carrierTracking(order.name);
   // The shell's phone header shows it as "REF: #…".
   ctx.refOrder = order ? orderLabel(order) : null;
   return { orders, order };
