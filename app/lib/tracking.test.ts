@@ -28,8 +28,9 @@ describe("workingDays", () => {
 describe("deckProgress", () => {
   it("paces production by business day like the storefront tracker", () => {
     expect(deckProgress(order(), at("2026-10-05T20:00:00Z"))).toMatchObject({ step: "production", percent: 22, checklistDone: 3 });
-    expect(deckProgress(order(), at("2026-10-06T15:00:00Z"))).toMatchObject({ step: "production", percent: 45, checklistDone: 5 });
-    expect(deckProgress(order(), at("2026-10-07T15:00:00Z"))).toMatchObject({ step: "production", percent: 62, checklistDone: 7 });
+    expect(deckProgress(order(), at("2026-10-06T15:00:00Z"))).toMatchObject({ step: "production", percent: 45, checklistDone: 4 });
+    expect(deckProgress(order(), at("2026-10-07T15:00:00Z"))).toMatchObject({ step: "production", percent: 60, checklistDone: 6 });
+    expect(deckProgress(order(), at("2026-10-08T15:00:00Z"))).toMatchObject({ step: "production", percent: 85, checklistDone: 7 });
   });
 
   it("stays in production until fulfillment is under way", () => {
@@ -39,8 +40,8 @@ describe("deckProgress", () => {
   it("moves to packing after 3 business days once fulfillment starts", () => {
     const o = order({ displayFulfillmentStatus: "IN_PROGRESS" });
     expect(deckProgress(o, at("2026-10-07T15:00:00Z")).step).toBe("production");
-    expect(deckProgress(o, at("2026-10-08T15:00:00Z"))).toMatchObject({ step: "packing", percent: 71 });
-    expect(deckProgress(o, at("2026-10-09T15:00:00Z"))).toMatchObject({ step: "packing", percent: 85 });
+    expect(deckProgress(o, at("2026-10-08T15:00:00Z"))).toMatchObject({ step: "packing", percent: 85 });
+    expect(deckProgress(o, at("2026-10-09T15:00:00Z"))).toMatchObject({ step: "packing", percent: 90 });
     expect(deckProgress(o, at("2026-10-12T15:00:00Z"))).toMatchObject({ step: "packing", percent: 95 });
     expect(deckProgress(o, at("2026-10-13T15:00:00Z"))).toMatchObject({ step: "packing", percent: 100 });
   });

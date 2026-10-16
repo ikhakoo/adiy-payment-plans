@@ -1,5 +1,5 @@
-// Where a deck order is in its journey. Ported from the storefront's tracking page
-// (theme ikhakoo/adiy_noibu_v2 › sections/tracking-widget.liquid) so the hub and that page agree:
+// Where a deck order is in its journey. Ported from the storefront's original tracking page
+// (theme ikhakoo/adiy_noibu_v2 › sections/tracking-widget-old.liquid) so the hub keeps its pace:
 // progress through production is paced by business days since the order (US Eastern), packing
 // starts once Shopify fulfillment is under way, and a fulfilled order is with the LTL carrier.
 
@@ -73,10 +73,11 @@ export function deckProgress(order: TrackableOrder, now = new Date()): DeckProgr
   if (days > 3 && underway) {
     if (status === "FULFILLED") return { step: "shipped", percent: 100, checklistDone: 7, eta: null, deliveredAt, shippedAt };
     const packingDays = days - 3;
-    const percent = packingDays <= 1 ? 71 : packingDays === 2 ? 85 : packingDays === 3 ? 95 : 100;
+    const percent = packingDays <= 1 ? 85 : packingDays === 2 ? 90 : packingDays === 3 ? 95 : 100;
     return { step: "packing", percent, checklistDone: 7, eta: "Estimate: 3 to 4 business days", deliveredAt, shippedAt };
   }
-  const [percent, checklistDone] = days <= 1 ? [22, 3] : days === 2 ? [45, 5] : [62, 7];
+  // Still with us after 3 days but not yet being fulfilled: the build is done, waiting to pack.
+  const [percent, checklistDone] = days <= 1 ? [22, 3] : days === 2 ? [45, 4] : days === 3 ? [60, 6] : [85, 7];
   return { step: "production", percent, checklistDone, eta: "Estimated: 3 business days", deliveredAt, shippedAt };
 }
 
