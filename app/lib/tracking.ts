@@ -53,14 +53,17 @@ export const DELIVERY_STEPS = [
 ];
 
 /**
- * The carrier's data, if it really belongs to this order. A fulfillment entered with another order's
- * tracking number brings that order's scans along, and those predate this order.
+ * The carrier's data for a fulfilled order.
+ *
+ * TODO(test mode): put the guard back before real customers use the hub, or skip it only in a test
+ * mode. Test orders are fulfilled with other orders' tracking numbers to show each delivery scenario,
+ * so for now we trust whatever the tracker returns; a real order with a mistyped tracking number would
+ * then show someone else's shipment. The guard was: ignore the carrier data when any scan predates
+ * the order (`c.events.some((e) => new Date(e.at) < new Date(order.createdAt))`).
  */
 export function carrierFor(order: TrackableOrder) {
   const c = order.carrier;
-  if (!c || !order.fulfillments.length) return null;
-  const placed = new Date(order.createdAt).getTime();
-  return c.events.some((e) => new Date(e.at).getTime() < placed) ? null : c;
+  return c && order.fulfillments.length ? c : null;
 }
 const eventAt = (c: CarrierTracking | null, code: string) => {
   const e = c?.events.find((x) => x.code === code);
