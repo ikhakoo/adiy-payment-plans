@@ -2,10 +2,9 @@ import type { LoaderFunctionArgs } from "react-router";
 import { esc } from "../lib/portal.server";
 import { hubContext, renderHub } from "../lib/hub.server";
 import { fmtDay, mainLine, orderQuery, orderSwitcher, selectedOrder } from "../lib/orders.server";
-import { deckProgress, partsGuarantee, PRODUCTION_CHECKLIST } from "../lib/tracking";
-import { carrierCards, GLYPH, liveTrackingUrl, percentBar, progressLine, STEP_COPY, updatesTimeline } from "../lib/tracking-view.server";
+import { deckProgress, partsGuarantee } from "../lib/tracking";
+import { carrierCards, checklistTimeline, GLYPH, liveTrackingUrl, orderNo, percentBar, progressLine, STEP_COPY, updatesTimeline } from "../lib/tracking-view.server";
 
-const CHECK = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>`;
 
 // GET /apps/hub/track — Track My Deck: production progress, shipping and delivery for one order.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -38,13 +37,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // While we still have the deck: the theme's build checklist.
   const checklist =
     p.step === "production"
-      ? `<div class="card">
+      ? `<div class="card trk-checks">
           <h2 class="h2">What's happening right now</h2>
           <p class="muted">Nothing leaves here until every check passes.</p>
-          <ul class="checklist">${PRODUCTION_CHECKLIST.map(
-            (c, i) => `<li class="${i < p.checklistDone ? "done" : ""}"><span class="box">${i < p.checklistDone ? CHECK : ""}</span>
-              <div><b>${c.title}</b><span>${c.text}</span></div></li>`,
-          ).join("")}</ul>
+          ${checklistTimeline(p)}
         </div>`
       : "";
   const deliveryDay =
@@ -72,7 +68,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     <div class="page-head trk-head">
       <div>
         <h1 class="h1">Track your deck.</h1>
-        <p class="trk-meta">Order ${esc(order.name)}${line ? `<i></i><b>${esc(line.title)}</b>` : ""}</p>
+        <p class="trk-meta">Order ${esc(orderNo(order.name))}${line ? `<i></i><b>${esc(line.title)}</b>` : ""}</p>
       </div>
       <span class="trk-status ${p.step === "delivered" ? "ok" : p.step === "shipped" ? "" : "warn"}"><i></i>${copy.pill}</span>
     </div>

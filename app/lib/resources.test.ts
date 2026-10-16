@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deckOverview, pageLayout, parseDeckSize, readiness, resourcesForOrder, SLOTS, specForOrder, type ResourceRow } from "./resources";
+import { deckOverview, pageLayout, parseDeckSize, readiness, resourcesForOrder, SLOTS, specForOrder, updatedAgo, type ResourceRow } from "./resources";
 
 const P1 = "gid://shopify/Product/1";
 const P2 = "gid://shopify/Product/2";
@@ -180,5 +180,18 @@ describe("deck overview", () => {
     expect(readiness("packing").stage).toBe("01");
     expect(readiness("shipped").stage).toBe("02");
     expect(readiness("delivered")).toMatchObject({ stage: "03", label: "Ready to build" });
+  });
+});
+
+describe("updatedAgo", () => {
+  const now = new Date("2026-10-16T12:00:00Z");
+  const at = (iso: string) => ({ updatedAt: new Date(iso) });
+  it("uses the newest resource", () => {
+    expect(updatedAgo([at("2026-10-01T00:00:00Z"), at("2026-10-13T09:00:00Z")], now)).toBe("Updated 3 days ago");
+    expect(updatedAgo([at("2026-10-16T08:00:00Z")], now)).toBe("Updated today");
+    expect(updatedAgo([at("2026-10-15T08:00:00Z")], now)).toBe("Updated 1 day ago");
+  });
+  it("is null without resources", () => {
+    expect(updatedAgo([], now)).toBeNull();
   });
 });

@@ -1,9 +1,12 @@
 // HTML for an order's progress, shared by Track My Deck and the Overview.
 import { esc } from "./portal.server";
 import type { HubOrder } from "./orders.server";
-import { carrierTrackingUrl, orderUpdates, type DeckProgress, type DeckStep, type UpdateKind } from "./tracking";
+import { carrierTrackingUrl, orderUpdates, PRODUCTION_CHECKLIST, type DeckProgress, type DeckStep, type UpdateKind } from "./tracking";
 
 const ORDER: DeckStep[] = ["production", "packing", "shipped", "delivered"];
+
+/** "#212481885" — some order names come without the "#", so always show one. */
+export const orderNo = (name: string) => `#${name.trim().replace(/^#+/, "")}`;
 
 // Dates on the tracker read in the store's time (US Eastern), like the business-day pacing in tracking.ts.
 const TZ = "America/New_York";
@@ -167,10 +170,10 @@ export const liveTrackingUrl = (order: HubOrder) =>
 export function carrierLine(order: HubOrder, p: DeckProgress) {
   const t = shopifyTracking(order)[0];
   const carrier = t?.company ?? "LTL freight";
-  if (p.step !== "shipped" && p.step !== "delivered") return `Order ${esc(order.name)} · Tracking ID available once your deck ships`;
+  if (p.step !== "shipped" && p.step !== "delivered") return `Order ${esc(orderNo(order.name))} · Tracking ID available once your deck ships`;
   return t?.number
     ? `Milestone tracking ID: #${esc(t.number.replace(/^#/, ""))} · Carrier: ${esc(carrier)}`
-    : `Order ${esc(order.name)} · Carrier: ${esc(carrier)}`;
+    : `Order ${esc(orderNo(order.name))} · Carrier: ${esc(carrier)}`;
 }
 
 /** Track My Deck: the Carrier & Tracking Details and Delivery Confirmation cards, at every stage. */
@@ -183,7 +186,7 @@ export function carrierCards(order: HubOrder, p: DeckProgress) {
   const carrier = shipped
     ? `<div class="label">Carrier &amp; tracking details</div>
         <div class="trk-info-big">${esc(t?.company ?? "LTL freight")}</div>
-        <div class="trk-mono">${esc(t?.number ?? `Order ${order.name}`)}</div>
+        <div class="trk-mono">${esc(t?.number ?? `Order ${orderNo(order.name)}`)}</div>
         ${t?.number ? `<div class="trk-info-actions"><button class="trk-chip" type="button" data-copy-value="${esc(t.number)}">${GLYPH.copy}<span>Copy tracking number</span></button></div>` : ""}`
     : `<div class="label">Carrier &amp; tracking details</div>
         <div class="trk-info-big">LTL freight</div>
@@ -210,24 +213,63 @@ export function carrierCards(order: HubOrder, p: DeckProgress) {
     </div>`;
 }
 
-/** Track My Deck: "Your order updates", newest first, collapsible without JS. */
-export function updatesTimeline(order: HubOrder, p: DeckProgress) {
-  const items = orderUpdates(order, p)
+export interface TimelineItem {
+  /** Extra classes on the row: "now" (gold node) or "todo" (hollow node). */
+  cls?: string;
+  icon: string;
+  title: string;
+  text: string;
+  when: string;
+}
+
+/** The Figma timeline: grey cards on a continuous green connector, icon nodes, date on the right. */
+export function timelineList(items: TimelineItem[]) {
+  return `<ol class="trk-timeline">${items
     .map(
-      (u) => `<li class="trk-tl-${u.kind}${u.at ? "" : " now"}">
-        <span class="trk-tl-dot">${UPDATE_ICON[u.kind]}</span>
+      (it) => `<li${it.cls ? ` class="${it.cls}"` : ""}>
+        <span class="trk-tl-dot">${it.icon}</span>
         <div class="trk-tl-body">
-          <div class="trk-tl-head"><b>${u.title}</b><small>${u.at ? fmtStamp(u.at) : "In progress"}</small></div>
-          <p>${u.text}</p>
+          <div class="trk-tl-head"><b>${it.title}</b><small>${it.when}</small></div>
+          <p>${it.text}</p>
         </div>
       </li>`,
     )
-    .join("");
+    .join("")}</ol>`;
+}
+
+/** Track My Deck, while in production: the theme's build checklist, in the timeline style. */
+export function checklistTimeline(p: DeckProgress) {
+  return timelineList(
+    PRODUCTION_CHECKLIST.map((c, i) => {
+      const done = i < p.checklistDone;
+      const now = i === p.checklistDone;
+      return {
+        cls: done ? undefined : now ? "now" : "todo",
+        icon: done ? UPDATE_ICON.delivered : now ? UPDATE_ICON.production : "",
+        title: c.title,
+        text: c.text,
+        when: done ? "Completed" : now ? "In progress" : "Up next",
+      };
+    }),
+  );
+}
+
+/** Track My Deck: "Your order updates", newest first, collapsible without JS. */
+export function updatesTimeline(order: HubOrder, p: DeckProgress) {
+  const items = timelineList(
+    orderUpdates(order, p).map((u) => ({
+      cls: `trk-tl-${u.kind}${u.at ? "" : " now"}`,
+      icon: UPDATE_ICON[u.kind],
+      title: u.title,
+      text: u.text,
+      when: u.at ? fmtStamp(u.at) : "In progress",
+    })),
+  );
   return `<details class="trk-updates" open>
       <summary>
         <div><h2 class="h2">Your order updates</h2><p class="muted">See your deck's progress from production to delivery.</p></div>
         <span class="trk-toggle"><span class="trk-when-open">Collapse timeline</span><span class="trk-when-closed">Expand timeline</span>${GLYPH.chevronUp}</span>
       </summary>
-      <ol class="trk-timeline">${items}</ol>
+      ${items}
     </details>`;
 }

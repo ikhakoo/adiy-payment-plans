@@ -3,9 +3,10 @@ import { rewardTypes } from "../lib/rewards.server";
 import { esc, money } from "../lib/portal.server";
 import { asset, hubContext, renderHub } from "../lib/hub.server";
 import { sentSubmissions } from "../lib/hub-rewards.server";
+import { resourcesUpdated } from "../lib/resources.server";
 import { mainLine, orderQuery, orderSwitcher, selectedOrder } from "../lib/orders.server";
 import { deckProgress } from "../lib/tracking";
-import { carrierLine, GLYPH, liveTrackingUrl, progressStrip, STEP_COPY } from "../lib/tracking-view.server";
+import { carrierLine, GLYPH, liveTrackingUrl, orderNo, progressStrip, STEP_COPY } from "../lib/tracking-view.server";
 
 // GET /apps/hub — Overview: the selected order at a glance, with the next thing to do.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -17,6 +18,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     rewardTypes(ctx.shop, { activeOnly: true }),
     sentSubmissions(ctx),
   ]);
+  // "Updated N days ago" beside View resources: the newest of this kit's build resources.
+  const resourcesNote = order ? await resourcesUpdated(ctx.shop, order.lineItems) : null;
   const topReward = types.reduce((max, t) => Math.max(max, Number(t.maxAmount)), 0);
   const possible = types.length * Math.max(1, ctx.rewardOrders.length);
   const sent = submissions.filter((s) => s.status !== "REJECTED").length;
@@ -101,7 +104,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       <h1 class="h1">Welcome to your A-DIY Hub${ctx.firstName ? `, ${esc(ctx.firstName)}` : ""}.</h1>
       ${
         order
-          ? `<p class="ov-meta">Order ${esc(order.name)}${line ? `<i>•</i>${esc(line.title)}${line.variantTitle ? `<i>•</i><b>${esc(line.variantTitle)}</b>` : ""}` : ""}</p>`
+          ? `<p class="ov-meta">Order ${esc(orderNo(order.name))}${line ? `<i>•</i>${esc(line.title)}${line.variantTitle ? `<i>•</i><b>${esc(line.variantTitle)}</b>` : ""}` : ""}${statusPill ? `<span class="ov-meta-pill">${statusPill}</span>` : ""}</p>`
           : ""
       }
       ${
@@ -131,7 +134,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         <p class="ov-card-text">Your installation guide, footing plan, and interactive 3D instructions for your ${line?.variantTitle ? `${esc(line.variantTitle)} ` : ""}deck kit.</p>
         <div class="ov-tags"><span>${GLYPH.check}Installation guide</span><span>${GLYPH.check}Footing plan</span><span>${GLYPH.check}3D instructional app</span></div>
         <div class="spacer"></div>
-        <div class="ov-card-foot"><a class="btn ov-btn" href="${ctx.url(`/resources${q}`)}">View resources ${GLYPH.arrow}</a></div>
+        <div class="ov-card-foot"><a class="btn ov-btn" href="${ctx.url(`/resources${q}`)}">View resources ${GLYPH.arrow}</a>${
+          resourcesNote ? `<span class="ov-foot-note">${resourcesNote}</span>` : ""
+        }</div>
       </div>
       <div class="card ov-card">
         <div class="ov-card-top">

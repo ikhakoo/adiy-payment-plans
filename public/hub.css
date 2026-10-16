@@ -1334,3 +1334,272 @@
   .hub .trk-timeline li { padding-left: 28px; }
   .hub .trk-top-btn { width: 100%; justify-content: center; }
 }
+
+/* ---- Round 2 · Rewards + Refer ---- */
+/* ================================================================ rewards round 2 */
+/* Figma's filled glyphs (figIcon) */
+.hub .rw-tile svg { width: 22px; height: 20px; color: var(--green); }
+.hub .rw-tile.sm svg { width: 18px; height: 17px; }
+.hub .rw-note svg { color: var(--green); }
+.hub .rw-ticker > svg { width: 20px; height: 19px; }
+.hub .rw-cashout-btn svg { width: 12px; height: 12px; }
+
+/* "View reward history": desktop jumps to the history card; phone has no history card (owner), so it opens the balance tab. */
+.hub .rw-phone { display: none; }
+
+@media (max-width: 720px) {
+  .hub .rw-desk, .hub .rw-history { display: none; }
+  .hub .rw-link-fill.rw-phone { display: flex; }
+
+  /* header: ticker card first, then title (m_earn) */
+  .hub .rw-head { flex-direction: column-reverse; align-items: stretch; gap: 12px; margin-bottom: 14px; }
+  .hub .rw-head .h1 { font-size: 24px; margin-bottom: 12px; }
+  .hub .rw-head .lede { font-size: 16px; }
+  .hub .rw-ticker { align-self: flex-start; padding: 9px 14px; gap: 11px; }
+  .hub .rw-ticker > div { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .hub .rw-ticker span { font-size: 11px; }
+  .hub .rw-ticker b { font-size: 12.5px; }
+  .hub .rw-bar { flex-direction: column; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .hub .rw-tabs { align-self: stretch; justify-content: space-between; }
+  .hub .rw-tabs a { padding: 7px 12px; font-size: 12px; }
+  .hub .rw-count { font-size: 12.5px; padding: 5px 11px; }
+
+  /* Earn: centred reward cards */
+  .hub .rw-tiers { padding: 12px; }
+  .hub .rw-tier { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+  .hub .rw-tier .rw-tile { width: 43px; height: 43px; }
+  .hub .rw-tier-text { display: flex; flex-direction: column; align-items: center; }
+  .hub .rw-tier-text .h3 { justify-content: center; font-size: 15.5px; }
+  .hub .rw-top { font-size: 10.5px; }
+  .hub .rw-tier-text p { font-size: 13px; max-width: none; }
+  .hub .rw-status li { justify-content: center; }
+  .hub .rw-tier-side { align-items: center; text-align: center; flex-direction: row; flex-wrap: wrap; justify-content: center; column-gap: 6px; }
+  .hub .rw-amount { font-size: 21px; }
+  .hub .rw-tier-side .label { font-size: 10.5px; }
+  .hub .rw-tier-cta { width: 100%; align-items: center; margin-top: 12px; }
+  .hub .rw-cta { min-width: 139px; padding: 7px 12px; }
+  .hub .rw-pick { width: auto; }
+  .hub .rw-note { flex-wrap: nowrap; padding: 10px; font-size: 11px; gap: 8px; }
+  .hub .rw-note > span { gap: 8px; }
+  .hub .rw-note b { font-size: 10px; flex: none; }
+
+  /* bottom banner: tag on the right */
+  .hub .rw-banner { padding: 12px; gap: 6px; }
+  .hub .rw-banner-main { gap: 10px; }
+  .hub .rw-banner-ico { width: 28px; height: 28px; border-radius: 8px; }
+  .hub .rw-banner-ico svg { width: 14px; height: 14px; }
+  .hub .rw-banner .h2 { font-size: 16.5px; }
+  .hub .rw-banner p { font-size: 11px; }
+  .hub .rw-banner-tag { align-self: flex-end; font-size: 10px; }
+
+  /* My submissions */
+  .hub .rw-empty { padding: 34px 20px; }
+  .hub .rw-empty p { font-size: 14px; }
+
+  /* Balance & redeem (m_balance) */
+  .hub .rw-sec-head .h2 { font-size: 21px; }
+  .hub .rw-metrics { grid-template-columns: minmax(0, 1fr); }
+  .hub .rw-metric { padding: 7px 7px 9px; }
+  .hub .rw-metric-head i { width: 22px; height: 22px; }
+  .hub .rw-threshold { text-align: center; gap: 13px; }
+  .hub .rw-threshold-title { justify-content: center; }
+  .hub .rw-redeem { padding: 13px; text-align: center; }
+  .hub .rw-redeem-title { font-size: 21px; }
+  .hub .rw-redeem > p { font-size: 12.5px; margin-left: auto; margin-right: auto; }
+  .hub .rw-giftrow { flex-direction: row; gap: 5px; margin: 13px -8px; text-align: left; }
+  .hub .rw-giftinfo { padding: 7px; gap: 6px; }
+  .hub .rw-gf { font-size: 9.5px; flex-wrap: nowrap; gap: 6px; }
+  .hub .rw-gf b { font-size: 9.5px; }
+  .hub .rw-gf input { font-size: 16px; padding: 3px 6px; } /* 16px stops iOS zooming on focus */
+  .hub .rw-giftimg { width: 83px; align-self: center; border-radius: 4px; }
+  .hub .rw-cashout-btn { width: auto; max-width: 100%; padding: 12px 23px; font-size: 9.5px; }
+  .hub .rw-avail { font-size: 11px; }
+  .hub .rw-sub-label { text-align: left; margin-top: 14px; }
+  .hub .rw-faq { text-align: left; }
+  .hub .rw-faq h4 { font-size: 15px; }
+}
+
+/* ---- Round 2 · Build Resources + Help & Support ---- */
+/* ---------------------------------------------------------------- ressup round 2: build resources */
+/* Items without an upload look exactly like the design (no dimming); they just aren't links. */
+.hub .res-btn.is-pending { cursor: default; }
+.hub .res-tile .res-i-text b { color: var(--green); }
+
+/* Phone (m_resources): hero buttons side by side, badges stay on the right, compact cards. */
+@media (max-width: 600px) {
+  .hub .res-head h1 { font-size: 24px; }
+  .hub .res-head p { font-size: 16px; }
+  .hub .res-hero2 { padding: 14px; gap: 14px; }
+  .hub .res-hero2 h2 { font-size: 22px; }
+  .hub .res-hero2 p { font-size: 14px; line-height: 1.6; }
+  .hub .res-hero-btns { gap: 10px; padding-top: 4px; flex-wrap: nowrap; }
+  .hub .res-btn { width: auto; flex: 1 1 auto; min-width: 0; justify-content: center; gap: 7px; padding: 11px 10px; border-radius: 7px; font-size: 9.7px; }
+  .hub .res-btn svg { width: 13px; height: 13px; }
+  .hub .res-btn svg:last-child:not(:first-child) { width: 9px; height: 9px; }
+  .hub .res-bento { padding: 14px; }
+  .hub .res-after, .hub .res-card { padding: 14px; }
+  .hub .res-sec-head { flex-wrap: nowrap; padding-bottom: 16px; }
+  .hub .res-sec-head h2 { font-size: clamp(17px, 5.4vw, 22px); gap: 8px; white-space: nowrap; }
+  .hub .res-cap { font-size: 11px; }
+  .hub .res-item { flex-wrap: nowrap; gap: 12px; padding: 12px 0; }
+  .hub .res-item .res-i-text { flex-basis: auto; }
+  .hub .res-item .res-tag { margin-left: 0; }
+  .hub .res-tiles { gap: 14px; padding-bottom: 14px; }
+  .hub .res-tile { padding: 14px; }
+  .hub .res-help { flex-wrap: wrap; padding: 14px; gap: 14px; }
+  .hub .res-help-btn { width: auto; margin-left: 56px; padding: 13px 20px; }
+}
+
+/* ---------------------------------------------------------------- ressup round 2: help & support */
+/* Phone (m_support): the 4-step pill stays on one row; desk buttons compact with the hold time beside them. */
+@media (max-width: 600px) {
+  .hub .sup-card { padding: 14px; }
+  .hub .sup-box { padding: 8px; gap: 14px; }
+  .hub .sup-empty { padding: 6px 6px 0; align-items: center; }
+  .hub .sup-stepper { flex-wrap: nowrap; white-space: nowrap; gap: 4px; padding: 6px 7px; border-radius: 8px; font-size: clamp(8px, 2.3vw, 9.5px); width: 100%; justify-content: space-between; }
+  .hub .sup-stepper svg { width: 7px; height: 7px; flex: none; }
+  .hub .sup-desk { padding: 14px; }
+  .hub .sup-desk-foot { flex-wrap: nowrap; gap: 10px; margin-top: 20px; }
+  .hub .sup-call, .hub .sup-mail { flex: none; padding: 8px 14px; gap: 8px; font-size: 9.5px; }
+  .hub .sup-call svg, .hub .sup-mail svg { width: 12px; height: 12px; }
+  .hub .sup-mail { padding: 8px 6px; }
+  .hub .sup-hold { width: auto; margin-left: auto; text-align: right; font-size: 11px; white-space: nowrap; }
+}
+@media (max-width: 340px) {
+  .hub .sup-desk-foot { flex-wrap: wrap; }
+}
+
+/* ---- Round 2 · Shell phone header, My Orders, Account ---- */
+/* ================================================================ ordacc round 2: phone shell header, My Orders phone, Account prefs */
+
+/* ---------------------------------------------------------------- shell: phone header (hub.server.ts hubPage) */
+.hub .hub-mtop { display: none; }
+@media (max-width: 900px) {
+  .hub .hub-side, .hub .hub-crumb { display: none; }
+  .hub .hub-mtop { position: relative; z-index: 30; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin: -20px -16px 18px; padding: 8px 16px; min-height: 56px; background: rgba(244, 244, 244, .85); }
+  .hub .hub-mtop-text { min-width: 0; }
+  .hub .hub-mtop-crumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text); line-height: 1.4; }
+  .hub .hub-mtop-crumb a { color: var(--green); text-decoration: none; }
+  .hub .hub-mtop-crumb i { font-style: normal; color: #c0c8c3; }
+  .hub .hub-ref { margin-left: 6px; padding: 1px 7px; background: #e8e8e8; color: var(--green); font-size: 10px; font-weight: 600; letter-spacing: .06em; white-space: nowrap; }
+  .hub .hub-mtop-title { font-size: 21px; font-weight: 500; color: var(--ink); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hub .hub-mtop-actions { display: flex; align-items: center; gap: 7px; flex: none; }
+  .hub .hub-menu { position: static; margin: 0; }
+  .hub .hub-menu > summary { list-style: none; display: grid; place-items: center; width: 39px; height: 39px; padding: 0; margin: 0; border-radius: var(--r-sm);
+    color: var(--green); cursor: pointer; background: none; }
+  .hub .hub-menu > summary::-webkit-details-marker { display: none; }
+  .hub .hub-menu > summary::marker { content: ""; }
+  .hub .hub-menu > summary::before, .hub .hub-menu > summary::after { content: none; }
+  .hub .hub-menu > summary svg { width: 20px; height: 20px; }
+  .hub .hub-menu[open] > summary { background: #e8e8e8; }
+  .hub .hub-menu > summary:focus-visible, .hub .hub-me:focus-visible { outline: 2px solid var(--green-2); outline-offset: 2px; }
+  .hub .hub-me { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 10px; background: #002f21; color: #fff; text-decoration: none; }
+  .hub .hub-me svg { width: 15px; height: 15px; }
+  .hub .hub-menu-panel { position: absolute; top: calc(100% + 6px); left: 16px; right: 16px; max-height: 70vh; overflow-y: auto; padding: 8px 8px 10px;
+    background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: 0 14px 34px rgba(0, 33, 22, .16); }
+  .hub .hub-menu-group { display: flex; flex-direction: column; gap: 2px; }
+  .hub .hub-menu-group + .hub-menu-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .hub .hub-menu-group > span { padding: 4px 10px; font-size: 10.5px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .hub .hub-menu-group a { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-sm); font-size: 15px; color: var(--text); text-decoration: none; }
+  .hub .hub-menu-group a:hover { background: var(--soft); }
+  .hub .hub-menu-group a:focus-visible { outline: 2px solid var(--green-2); outline-offset: -2px; }
+  .hub .hub-menu-group a.active { background: var(--green); color: #fff; font-weight: 500; }
+  .hub .hub-menu-group svg { width: 18px; height: 18px; flex: none; }
+}
+
+/* ---------------------------------------------------------------- My Orders: phone per Figma m_orders */
+@media (max-width: 720px) {
+  .hub .ord-card-head { flex-wrap: nowrap; gap: 10px; padding: 14px; }
+  .hub .ord-id { gap: 12px; }
+  .hub .ord-tile { width: 28px; height: 28px; }
+  .hub .ord-tile svg { width: 16px; height: 16px; }
+  .hub .ord-id .label { font-size: 10px; }
+  .hub .ord-title { font-size: 16px; }
+  .hub .ord-meta { flex-direction: row; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; }
+  .hub .ord-status { font-size: 12px; padding: 2px 9px; }
+  .hub .ord-status::before { width: 6px; height: 6px; }
+  .hub .ord-date { font-size: 12px; white-space: nowrap; }
+  .hub .ord-row-title { font-size: 15px; }
+  .hub .ord-item { flex-wrap: nowrap; gap: 12px; padding: 12px 14px; }
+  .hub .ord-item img, .hub .ord-item .ord-img { width: 40px; height: 40px; }
+  .hub .ord-item-title { font-size: 13px; }
+  .hub .ord-item-size { font-size: 12px; }
+  .hub .ord-qty { font-size: 10px; padding: 3px 7px; }
+  .hub .ord-pay-line { flex-direction: row; flex-wrap: wrap; gap: 4px 9px; font-size: 13px; }
+  .hub .ord-pay-line i { display: inline; }
+  .hub .ord-pay-detail { font-size: 12px; }
+  .hub .ord-pay-detail svg { width: 14px; height: 14px; margin-top: 1px; }
+  .hub .ord-docs { gap: 8px; }
+  .hub .ord-doc-btn { flex: 0 1 auto; min-width: 0; padding: 7px 10px; gap: 7px; font-size: 12px; }
+  .hub .ord-doc-btn span { white-space: nowrap; }
+  .hub .ord-doc-btn svg { width: 14px; height: 14px; }
+  .hub .ord-actions { justify-content: center; gap: 10px; }
+  .hub .ord-actions .btn { flex: 0 1 auto; padding: 10px 14px; font-size: 11px; }
+  .hub .btn.ord-addr-btn { align-self: center; }
+}
+
+/* ---------------------------------------------------------------- Account: Preferences & security (phone, Figma m_account) */
+.hub .acc-prefs { display: none; }
+@media (max-width: 900px) {
+  .hub .card.acc-card.acc-prefs { display: flex; }
+}
+.hub .acc-prefs-list { list-style: none; margin: 0; padding: 0; }
+.hub .acc-prefs-list li { margin: 0; border-top: 1px solid var(--line); }
+.hub .acc-prefs-list li:first-child { border-top: 0; }
+.hub .acc-pref { display: flex; align-items: center; gap: 14px; padding: 14px 0; text-decoration: none; color: var(--green); }
+.hub .acc-pref:focus-visible { outline: 2px solid var(--green-2); outline-offset: 2px; }
+.hub .acc-pref-ico { width: 28px; height: 28px; flex: none; border-radius: 3px; background: var(--soft); color: var(--green); display: grid; place-items: center; }
+.hub .acc-pref-ico svg { width: 15px; height: 15px; }
+.hub .acc-pref-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.hub .acc-pref-text b { font-size: 15px; font-weight: 500; color: var(--green); }
+.hub .acc-pref-text small { font-size: 12px; color: var(--text); overflow-wrap: anywhere; }
+.hub .acc-pref-go { flex: none; color: var(--muted); display: grid; }
+.hub .acc-pref-go svg { width: 16px; height: 16px; }
+.hub .acc-pref.danger .acc-pref-ico { color: #c0261b; }
+.hub .acc-pref.danger .acc-pref-text b { color: #c0261b; }
+
+/* ---- Round 2 · Overview + Track My Deck ---- */
+/* ---------------------------------------------------------------- overview + track, round 2 (ovtrack) */
+/* Status pill: in the header row on desktop, inline after the order line on phone (m_overview). */
+.hub .ov-meta-pill { display: none; }
+
+/* Timeline (order updates + production checklist): one continuous connector, even for a single item. */
+.hub .trk-timeline li::before,
+.hub .trk-timeline li:not(:last-child)::before { content: ""; position: absolute; left: 9px; top: 10px; bottom: 0; width: 2px; background: var(--green); }
+.hub .trk-timeline li:last-child::before { bottom: 8px; }
+.hub .trk-timeline li { padding-bottom: 16px; }
+.hub .trk-timeline li:last-child { padding-bottom: 0; }
+.hub .trk-tl-dot { z-index: 1; }
+.hub .trk-timeline li.todo .trk-tl-dot { background: #fff; border: 2px solid #c0c8c3; box-shadow: 0 0 0 4px #fff; }
+.hub .trk-timeline li.todo .trk-tl-head b { color: var(--muted); }
+.hub .trk-checks .trk-timeline { margin-top: 18px; }
+.hub .trk-checks .trk-timeline li:first-child .trk-tl-head b { color: var(--ink); }
+.hub .trk-checks .trk-timeline li.now .trk-tl-head b { color: var(--green); }
+
+/* Step line: clear check marks on completed steps. */
+.hub .trk-line .trk-mark svg { width: 14px; height: 11px; }
+.hub .trk-line li.here.done .trk-mark svg { width: 18px; height: 17px; }
+
+@media (max-width: 900px) {
+  .hub .trk-line { grid-template-columns: 1fr; row-gap: 16px; }
+}
+
+@media (max-width: 720px) {
+  /* Header per m_overview: pill inline with the order line, three compact buttons on one row. */
+  .hub .ov-meta { gap: 2px 8px; font-size: 12px; }
+  .hub .ov-meta-pill { display: inline-flex; }
+  .hub .ov-head-row > .ov-status { display: none; }
+  .hub .ov-head-row { margin-top: 12px; }
+  .hub .ov-actions { flex-wrap: nowrap; gap: 6px; }
+  .hub .ov-act { flex: 0 1 auto; padding: 6px 8px; gap: 4px; font-size: 10px; letter-spacing: .06em; }
+  .hub .ov-act svg { width: 11px; height: 11px; }
+
+  /* Hero: copy first, deck render along the bottom of the green card. */
+  .hub .ov-hero-img { order: 1; height: 240px; }
+  .hub .ov-hero-img::after { background: linear-gradient(180deg, var(--green) 0%, rgba(25, 70, 54, 0) 45%); }
+  .hub .ov-hero-text { padding: 26px 22px 8px; }
+}
+@media (max-width: 360px) {
+  .hub .ov-actions { flex-wrap: wrap; }
+}

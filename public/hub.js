@@ -202,3 +202,32 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
+// Phone header menu (hub.server.ts hubPage): a <details> that opens without JS. Here it also
+// closes on an outside click or Escape and reports its state on the button.
+(function () {
+  var menu = document.querySelector("details[data-hub-menu]");
+  if (!menu) return;
+  var btn = menu.querySelector("summary");
+  function sync() {
+    btn.setAttribute("aria-expanded", menu.open ? "true" : "false");
+    btn.setAttribute("aria-label", menu.open ? "Close hub menu" : "Open hub menu");
+  }
+  sync();
+  menu.addEventListener("toggle", function () {
+    sync();
+    if (menu.open) {
+      var current = menu.querySelector("a[aria-current]") || menu.querySelector("a");
+      if (current) current.focus();
+    }
+  });
+  document.addEventListener("click", function (e) {
+    if (menu.open && !menu.contains(e.target)) menu.open = false;
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && menu.open) {
+      menu.open = false;
+      btn.focus();
+    }
+  });
+})();

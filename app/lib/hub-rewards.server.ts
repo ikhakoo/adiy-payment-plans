@@ -41,6 +41,17 @@ export const RW_ICONS = {
 } as const;
 export const rwIcon = (name: keyof typeof RW_ICONS) => icon(RW_ICONS[name]);
 
+/** Figma's own (filled, Material-style) glyphs where testers compared icons one-to-one. */
+const FIG_ICONS = {
+  video: ["0 0 30 24", "M2.93 23.51C2.13 23.51 1.43 23.23 0.86 22.65C0.28 22.07 0 21.38 0 20.57V2.93C0 2.13 0.28 1.43 0.86 0.86C1.43 0.28 2.13 0 2.93 0H20.57C21.38 0 22.07 0.28 22.65 0.86C23.23 1.43 23.51 2.13 23.51 2.93V9.55L29.39 3.67V19.84L23.51 13.96V20.57C23.51 21.38 23.23 22.07 22.65 22.65C22.07 23.23 21.38 23.51 20.57 23.51H2.93ZM2.93 20.57H20.57V2.93H2.93V20.57Z"],
+  phone: ["0 0 23 33", "M2.93 32.33C2.13 32.33 1.43 32.05 0.86 31.47C0.28 30.89 0 30.20 0 29.39V2.93C0 2.13 0.28 1.43 0.86 0.86C1.43 0.28 2.13 0 2.93 0H17.63C18.44 0 19.13 0.28 19.71 0.86C20.29 1.43 20.57 2.13 20.57 2.93V7.49C21.01 7.66 21.37 7.93 21.64 8.30C21.91 8.67 22.04 9.08 22.04 9.55V12.49C22.04 12.95 21.91 13.37 21.64 13.74C21.37 14.11 21.01 14.38 20.57 14.55V29.39C20.57 30.20 20.29 30.89 19.71 31.47C19.13 32.05 18.44 32.33 17.63 32.33H2.93ZM2.93 29.39H17.63V2.93H2.93V29.39ZM10.28 7.34C10.70 7.34 11.05 7.20 11.33 6.92C11.61 6.64 11.75 6.29 11.75 5.87C11.75 5.46 11.61 5.11 11.33 4.83C11.05 4.55 10.70 4.40 10.28 4.40C9.87 4.40 9.52 4.55 9.24 4.83C8.96 5.11 8.81 5.46 8.81 5.87C8.81 6.29 8.96 6.64 9.24 6.92C9.52 7.20 9.87 7.34 10.28 7.34Z"],
+  photos: ["0 0 30 30", "M10.28 17.63H24.98L19.91 11.02L16.53 15.43L14.25 12.49L10.28 17.63ZM8.81 23.51C8.01 23.51 7.31 23.23 6.74 22.65C6.16 22.07 5.87 21.38 5.87 20.57V2.93C5.87 2.13 6.16 1.43 6.74 0.86C7.31 0.28 8.01 0 8.81 0H26.45C27.26 0 27.95 0.28 28.53 0.86C29.11 1.43 29.39 2.13 29.39 2.93V20.57C29.39 21.38 29.11 22.07 28.53 22.65C27.95 23.23 27.26 23.51 26.45 23.51H8.81ZM8.81 20.57H26.45V2.93H8.81V20.57ZM2.93 29.39C2.13 29.39 1.43 29.11 0.86 28.53C0.28 27.95 0 27.26 0 26.45V5.87H2.93V26.45H23.51V29.39H2.93Z"],
+  badge: ["0 0 25 24", "M8.37 23.15L6.28 19.62L2.31 18.74L2.70 14.66L0 11.57L2.70 8.48L2.31 4.40L6.28 3.52L8.37 0L12.12 1.59L15.87 0L17.96 3.52L21.93 4.40L21.55 8.48C21.55 8.48 24.25 9.97 24.25 11.57C24.25 13.17 21.55 14.66 21.55 14.66L21.93 18.74L17.96 19.62L15.87 23.15L12.12 21.55L8.37 23.15ZM9.31 20.33L12.12 19.12L14.99 20.33L16.53 17.69L19.56 16.97L19.29 13.89L21.33 11.57L19.29 9.20L19.56 6.11L16.53 5.45L14.93 2.81L12.12 4.02L9.26 2.81L7.71 5.45L4.68 6.11L4.96 9.20L2.92 11.57L4.96 13.89L4.68 17.03L7.71 17.69L9.31 20.33ZM10.96 15.48L17.19 9.26L15.65 7.66L10.96 12.34L8.59 10.03L7.05 11.57L10.96 15.48Z"],
+  redeem: ["0 0 17 16", "M1.66 12.5V14.16H15V12.5H1.66ZM1.66 3.33H3.5C3.43 3.20 3.38 3.07 3.36 2.93C3.34 2.79 3.33 2.65 3.33 2.5C3.33 1.80 3.57 1.21 4.06 0.72C4.54 0.24 5.13 0 5.83 0C6.25 0 6.63 0.10 6.98 0.32C7.34 0.53 7.65 0.80 7.91 1.12L8.33 1.66L8.75 1.12C9 0.79 9.30 0.52 9.66 0.31C10.02 0.10 10.41 0 10.83 0C11.52 0 12.11 0.24 12.60 0.72C13.09 1.21 13.33 1.80 13.33 2.5C13.33 2.65 13.32 2.79 13.30 2.93C13.28 3.07 13.23 3.20 13.16 3.33H15C15.45 3.33 15.85 3.49 16.17 3.82C16.50 4.14 16.66 4.54 16.66 5V14.16C16.66 14.62 16.50 15.01 16.17 15.34C15.85 15.67 15.45 15.83 15 15.83H1.66C1.20 15.83 0.81 15.67 0.48 15.34C0.16 15.01 0 14.62 0 14.16V5C0 4.54 0.16 4.14 0.48 3.82C0.81 3.49 1.20 3.33 1.66 3.33ZM1.66 10H15V5H10.75L12.5 7.37L11.16 8.33L8.33 4.5L5.5 8.33L4.16 7.37L5.87 5H1.66V10ZM5.83 3.33C6.06 3.33 6.26 3.25 6.42 3.09C6.58 2.93 6.66 2.73 6.66 2.5C6.66 2.26 6.58 2.06 6.42 1.90C6.26 1.74 6.06 1.66 5.83 1.66C5.59 1.66 5.39 1.74 5.23 1.90C5.07 2.06 5 2.26 5 2.5C5 2.73 5.07 2.93 5.23 3.09C5.39 3.25 5.59 3.33 5.83 3.33ZM10.83 3.33C11.06 3.33 11.26 3.25 11.42 3.09C11.58 2.93 11.66 2.73 11.66 2.5C11.66 2.26 11.58 2.06 11.42 1.90C11.26 1.74 11.06 1.66 10.83 1.66C10.59 1.66 10.39 1.74 10.23 1.90C10.07 2.06 10 2.26 10 2.5C10 2.73 10.07 2.93 10.23 3.09C10.39 3.25 10.59 3.33 10.83 3.33Z"],
+} as const;
+export const figIcon = (name: keyof typeof FIG_ICONS) =>
+  `<svg viewBox="${FIG_ICONS[name][0]}" fill="currentColor" aria-hidden="true"><path d="${FIG_ICONS[name][1]}"/></svg>`;
+
 /** The customer's submissions that have been sent for review (drafts are still uploading). */
 export const sentSubmissions = (ctx: HubContext) =>
   db.submission.findMany({
@@ -73,7 +84,7 @@ export async function rewardsLayout(ctx: HubContext, tab: RewardTab, content: st
         <h1 class="h1">Share your deck. Earn rewards.</h1>
         <p class="lede">Show your finished deck and share your honest experience. Positive feedback is not required.</p>
       </div>
-      <div class="rw-ticker">${rwIcon("gift")}<div><span>Your rewards</span><b>Amazon gift cards</b></div></div>
+      <div class="rw-ticker">${figIcon("redeem")}<div><span>Your rewards</span><b>Amazon gift cards</b></div></div>
     </div>
     <div class="rw-bar">
       <nav class="tabs rw-tabs" aria-label="Rewards">${tabs}</nav>
@@ -87,7 +98,8 @@ export async function rewardsLayout(ctx: HubContext, tab: RewardTab, content: st
           <p>Your approved rewards</p>
           <div class="rw-big">${usd(bal.availableCents / 100)}<small>USD</small></div>
           ${bal.pendingCents ? `<p class="muted rw-pending">${usd(bal.pendingCents / 100)} pending approval</p>` : ""}
-          <a class="rw-link rw-link-fill" href="${ctx.url("/rewards/balance")}#history">View reward history${icon('<path d="M5 12h14M13 6l6 6-6 6"/>')}</a>
+          <a class="rw-link rw-link-fill rw-desk" href="${ctx.url("/rewards/balance")}#history">View reward history${icon('<path d="M5 12h14M13 6l6 6-6 6"/>')}</a>
+          <a class="rw-link rw-link-fill rw-phone" href="${ctx.url("/rewards/balance")}">View reward history${icon('<path d="M5 12h14M13 6l6 6-6 6"/>')}</a>
           <details class="rw-terms">
             <summary class="rw-link">Reward Terms &amp; Requirements${rwIcon("chevron")}</summary>
             <p class="muted">${esc(ctx.settings.agreementText)}</p>
@@ -126,11 +138,20 @@ export const STATUS_PILL: Record<Submission["status"], string> = {
   REJECTED: `<span class="pill bad dot">Not approved</span>`,
 };
 
+const isWalkthrough = (type: RewardType) => /walk-?through/i.test(type.name);
+
 /** Icon for a reward type, matching the Figma tiles: walkthrough camera, phone clip, photo set. */
 export function rewardIcon(type: RewardType, index: number) {
-  if (type.media === "PHOTO") return rwIcon("photos");
+  if (type.media === "PHOTO") return figIcon("photos");
   if (type.media === "ANY") return rwIcon("camera");
-  return rwIcon(index === 0 ? "video" : "phone");
+  return figIcon(isWalkthrough(type) || index === 0 ? "video" : "phone");
+}
+
+/** Figma's CTA labels, from the reward's media (the type's name is merchant copy and can be long). */
+function startLabel(type: RewardType) {
+  if (type.media === "PHOTO") return "Start photo set";
+  if (type.media === "ANY") return "Start submission";
+  return isWalkthrough(type) ? "Start walkthrough" : "Start video review";
 }
 
 /** Where one order stands for one reward type, and what (if anything) the customer can do next. */
@@ -141,7 +162,6 @@ function tierState(ctx: HubContext, order: PortalOrder, type: RewardType, submis
   const latest = mine[0];
   const used = mine.filter((s) => s.status !== "REJECTED").length;
   const url = ctx.url(`/submit?order=${order.id.split("/").pop()}&type=${type.id}`);
-  const startLabel = `Start ${type.media === "PHOTO" ? "photo set" : type.name.toLowerCase().replace(/^full /, "")}`;
 
   if (latest?.status === "NEEDS_CHANGES") {
     return { status: STATUS_PILL.NEEDS_CHANGES, note: esc(latest.reviewMessage), url, label: "Update submission" };
@@ -154,7 +174,7 @@ function tierState(ctx: HubContext, order: PortalOrder, type: RewardType, submis
   if (latest?.status === "REJECTED") {
     return { status: STATUS_PILL.REJECTED, note: esc(latest.reviewMessage), url, label: "Try again" };
   }
-  return { status: "", note: "", url, label: startLabel };
+  return { status: "", note: "", url, label: startLabel(type) };
 }
 
 /**

@@ -3,7 +3,7 @@ import db from "../db.server";
 import { esc, money } from "../lib/portal.server";
 import { balance, fmtDate, history } from "../lib/ledger.server";
 import { asset, hubContext, renderHub } from "../lib/hub.server";
-import { rewardsLayout, rwIcon, usd } from "../lib/hub-rewards.server";
+import { figIcon, rewardsLayout, rwIcon, usd } from "../lib/hub-rewards.server";
 
 // GET /apps/hub/rewards/balance — Rewards › Balance & redeem: totals, cash-out and history.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -46,7 +46,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const faq = [
     ["clock", "How long does review take?", "Our team reviews your photos and videos within 2 to 3 business days. We check that your submission meets the program requirements."],
     ["zap", "Does my review need to be positive?", "No. Share your honest experience, including anything you found challenging. Rewards depend on meeting the submission requirements, not positive feedback."],
-    ["calendar", "When can I spend an approved reward?", `Approved rewards stay pending for ${ctx.settings.holdDays} days, then move to your available balance.`],
   ] as const;
 
   const content = `
@@ -81,22 +80,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                  <label class="rw-gf"><span>Send to:</span><input id="rw-email" type="email" value="${esc(ctx.email ?? "")}"></label>`
               : `<div class="rw-gf"><span>Send to:</span><b>${esc(ctx.email ?? "The email on your account")}</b></div>`
           }
-          <div class="rw-gf"><span>Processing Time:</span><b class="soft">Usually within 2 business days</b></div>
+          <div class="rw-gf"><span>Processing Time:</span><b class="soft">Direct automated dispatch after audit</b></div>
         </div>
         <img class="rw-giftimg" src="${asset("hub-img/rw-amazon-gift-card.png")}" alt="Amazon.com gift card" width="173" height="108" loading="lazy">
       </div>
       <p id="rw-cashout-msg" class="notice warn" style="display:none"></p>
       ${
         canCashOut
-          ? `<button class="btn rw-cashout-btn" id="rw-cashout-btn">${rwIcon("gift")}Cash out with Amazon gift card</button>
+          ? `<button class="btn rw-cashout-btn" id="rw-cashout-btn">${figIcon("redeem")}Cash out with Amazon gift card</button>
              <p class="rw-avail">Available balance: ${usd(available)}</p>`
-          : `<button class="btn rw-cashout-btn" disabled>${rwIcon("gift")}Cash out with Amazon gift card</button>
+          : `<button class="btn rw-cashout-btn" disabled>${figIcon("redeem")}Cash out with Amazon gift card</button>
              <p class="rw-avail">Available balance: ${usd(available)} · ${usd(minCashout - available)} more needed to redeem</p>`
       }
 
+      <div class="rw-history">
       <h3 class="label rw-sub-label" id="history">Reward history</h3>
       <div class="rw-panel">
         ${historyRows ? `<ul class="rows rw-hist">${historyRows}</ul>` : `<p class="muted rw-hist-empty">${rwIcon("history")}Your approved rewards and gift cards will show here.</p>`}
+      </div>
       </div>
 
       <h3 class="label rw-sub-label">Rewards policy &amp; FAQ</h3>

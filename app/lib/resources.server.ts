@@ -2,7 +2,7 @@
 // the admin editor (app.build-resources.tsx).
 import type { BuildResource, KitSpec } from "@prisma/client";
 import db from "../db.server";
-import { resourcesForOrder, specForOrder, type OrderLine } from "./resources";
+import { resourcesForOrder, specForOrder, SECTIONS, updatedAgo, type OrderLine } from "./resources";
 
 /** Resources (by section) and kit spec for an order's line items; `line` is the line the spec belongs to. */
 export async function orderResources<L extends OrderLine>(shop: string, lines: L[]) {
@@ -18,6 +18,12 @@ export async function orderResources<L extends OrderLine>(shop: string, lines: L
     spec: found?.spec ?? null,
     specLine: (found?.line as L | undefined) ?? null,
   };
+}
+
+/** "Updated N days ago" for the resources an order's customer sees, or null when there are none. */
+export async function resourcesUpdated(shop: string, lines: OrderLine[]) {
+  const { sections } = await orderResources(shop, lines);
+  return updatedAgo(SECTIONS.flatMap((s) => sections[s]));
 }
 
 // ---------------------------------------------------------------- Shopify Files uploads

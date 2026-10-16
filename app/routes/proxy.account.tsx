@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { esc } from "../lib/portal.server";
 import { asset, hubContext, icon, renderHub, type HubContext } from "../lib/hub.server";
-import { HUB_ICONS as I, addressLine, deliveryNote, hubOrders } from "../lib/orders.server";
+import { HUB_ICONS as I, addressLine, deliveryNote, hubOrders, orderLabel } from "../lib/orders.server";
 
 const CUSTOMER = `#graphql
   query HubAccount($id: ID!) {
@@ -184,13 +184,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // The newest order with a delivery address: where the deck in progress is going.
   const active = orders.find((o) => o.shippingAddress);
+  ctx.refOrder = active ? orderLabel(active) : orders[0] ? orderLabel(orders[0]) : null;
   const s = active?.shippingAddress;
   const note = active ? deliveryNote(active) : "";
   const activeBlock = s
     ? `<div class="acc-active">
         <div class="acc-tags">
           <span class="acc-tag dark">Active order address</span>
-          <span class="acc-tag">${icon(I.clock)}Order ${esc(active!.name)}</span>
+          <span class="acc-tag">${icon(I.clock)}Order ${esc(orderLabel(active!))}</span>
         </div>
         <div class="acc-active-street">${esc(street(s)) || esc(s.name ?? "")}</div>
         <div class="acc-active-area">${esc(area(s))}</div>
@@ -240,7 +241,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ? "Matches shipping"
       : billingSource.from === "default"
         ? "Your default address"
-        : `From order ${esc(orders.find((o) => o.billingAddress)!.name)}`;
+        : `From order ${esc(orderLabel(orders.find((o) => o.billingAddress)!))}`;
   const billing = `
     <div class="acc-billing">
       <span class="acc-billing-ico">${icon(I.receipt)}</span>
@@ -267,6 +268,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ${billing}
     </div>`;
 
+  // Preferences & security (phone layout per Figma m_account). Destinations are Shopify's own
+  // customer account pages, resolved by the theme's Liquid routes (this page is rendered as Liquid):
+  // the profile page holds the contact email/phone order updates go to; sign out is the store logout.
+  const profileUrl = "{% assign hub_acc = routes.account_url | split: '?' %}{{ hub_acc | first }}/profile";
+  const pref = (href: string, ico: string, title: string, sub: string, cls = "") =>
+    `<li><a class="acc-pref${cls}" href="${href}"><span class="acc-pref-ico">${icon(ico)}</span><span class="acc-pref-text"><b>${title}</b>${sub ? `<small>${sub}</small>` : ""}</span>${cls ? "" : `<span class="acc-pref-go">${icon(I.chevronRight)}</span>`}</a></li>`;
+  const prefs = `
+    <div class="card acc-card acc-prefs">
+      <div><h2 class="acc-title">Preferences &amp; security</h2><p class="acc-sub">Manage your order updates and sign-in settings.</p></div>
+      <ul class="acc-prefs-list">
+        ${pref(profileUrl, I.bell, "Order notifications", email ? `Order updates are sent to ${esc(email)}${phone ? ` and ${esc(phone)}` : ""}` : "Manage where order updates are sent")}
+        ${pref(profileUrl, I.lock, "Sign-in &amp; security", "One-time email code sign-in. Manage your profile and sign-in email")}
+        ${pref("{{ routes.account_logout_url }}", I.logout, "Sign out", "", " danger")}
+      </ul>
+    </div>`;
+
   const body = `
     <div class="page-head acc-page-head">
       <h1 class="h1">Your account, all in one place.</h1>
@@ -274,7 +291,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     </div>
     ${updated ? `<div class="notice">Your changes have been saved.</div>` : ""}
     <div class="acct acc" id="hub-account" data-config="${esc(JSON.stringify({ url: ctx.url("/account") }))}">
-      ${personal}${saved}
+      ${personal}${saved}${prefs}
     </div>
     <script src="${asset("hub-account.js")}" defer></script>`;
 

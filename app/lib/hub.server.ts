@@ -68,7 +68,14 @@ const head = () => `
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="${asset("hub.css")}">`;
 
-/** A hub page: sidebar nav + breadcrumb + content. */
+const GRID = '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>';
+const USER = '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
+
+/**
+ * A hub page: sidebar nav + breadcrumb + content on desktop. On phones the sidebar is replaced by
+ * a compact header (brand, page title, REF badge, a menu button that opens the section nav, and an
+ * account link). The menu is a <details>, so it opens without JS; hub.js adds outside-click/Escape.
+ */
 export function hubPage({
   base,
   active,
@@ -76,6 +83,7 @@ export function hubPage({
   customerName,
   testMode = false,
   body,
+  refOrder = null,
 }: {
   base: string;
   active: HubSection | null;
@@ -83,21 +91,33 @@ export function hubPage({
   customerName?: string | null;
   testMode?: boolean;
   body: string;
+  /** "#212481899": shown as "REF: #212481899" in the phone header. */
+  refOrder?: string | null;
 }) {
   const url = hubLinks(base);
-  const nav = NAV.map((g) => {
-    const items = g.items.filter((i) => i.live);
-    if (!items.length) return "";
-    return `<div class="hub-nav-group"><span>${g.group}</span>${items
-      .map(
-        (i) =>
-          `<a href="${url(i.path)}"${i.key === active ? ' class="active" aria-current="page"' : ""}>${icon(ICONS[i.key])}${i.label}</a>`,
-      )
-      .join("")}</div>`;
-  }).join("");
+  const groups = NAV.map((g) => ({ ...g, items: g.items.filter((i) => i.live) })).filter((g) => g.items.length);
+  const link = (i: (typeof NAV)[number]["items"][number]) =>
+    `<a href="${url(i.path)}"${i.key === active ? ' class="active" aria-current="page"' : ""}>${icon(ICONS[i.key])}${i.label}</a>`;
+  const nav = groups.map((g) => `<div class="hub-nav-group"><span>${g.group}</span>${g.items.map(link).join("")}</div>`).join("");
+  const menu = groups
+    .map((g) => `<div class="hub-menu-group"><span>${g.group}</span>${g.items.map(link).join("")}</div>`)
+    .join("");
   const initial = (customerName ?? "").trim().charAt(0).toUpperCase() || "A";
   return `${head()}
 <div class="hub">
+  <header class="hub-mtop">
+    <div class="hub-mtop-text">
+      <div class="hub-mtop-crumb"><a href="${url()}">A-DIY</a><i aria-hidden="true">/</i><span>Portal</span>${refOrder ? `<b class="hub-ref">Ref: ${esc(refOrder)}</b>` : ""}</div>
+      <div class="hub-mtop-title">${esc(title)}</div>
+    </div>
+    <div class="hub-mtop-actions">
+      <details class="hub-menu" data-hub-menu>
+        <summary class="hub-menu-btn" aria-label="Open hub menu" title="Menu">${icon(GRID)}</summary>
+        <nav class="hub-menu-panel" aria-label="Hub sections">${menu}</nav>
+      </details>
+      <a class="hub-me" href="${url("/account")}" aria-label="Account &amp; Addresses" title="Account &amp; Addresses">${icon(USER)}</a>
+    </div>
+  </header>
   <div class="hub-shell">
     <aside class="hub-side">
       <a class="hub-brand" href="${url()}" style="text-decoration:none"><i>A</i>A-DIY HUB</a>
@@ -162,29 +182,34 @@ export async function hubContext(request: Request) {
     return { ctx: null, page: liquid(hubBarePage(`<h1 class="h1">A-DIY Hub</h1><p>Coming soon: your orders, build resources and rewards, all in one place.</p>`)) } as const;
   }
 
-  return {
-    page: null,
-    ctx: {
-      admin,
-      base,
-      /** Builds a link inside this store's hub, e.g. url("/rewards") → "/apps/hub/rewards". */
-      url: hubLinks(base),
-      shop,
-      customerId,
-      liquid,
-      settings,
-      customerName: data?.name ?? null,
-      firstName: data?.name?.split(" ")[0] ?? null,
-      email: data?.email ?? null,
-      /** Orders that can earn rewards (delivered, not cancelled or refunded, not installments). */
-      rewardOrders: data?.orders ?? [],
-      testMode: isTestMode(settings, data?.email),
-    },
-  } as const;
+  const ctx = {
+    admin,
+    base,
+    /** Builds a link inside this store's hub, e.g. url("/rewards") → "/apps/hub/rewards". */
+    url: hubLinks(base),
+    shop,
+    customerId,
+    liquid,
+    settings,
+    customerName: data?.name ?? null,
+    firstName: data?.name?.split(" ")[0] ?? null,
+    email: data?.email ?? null,
+    /** Orders that can earn rewards (delivered, not cancelled or refunded, not installments). */
+    rewardOrders: data?.orders ?? [],
+    testMode: isTestMode(settings, data?.email),
+    /**
+     * The order the page is about, as "#212481899", for the phone header's REF badge. Set by
+     * selectedOrder() (orders.server.ts) or a page itself; null hides the badge.
+     */
+    refOrder: null as string | null,
+  };
+  return { page: null, ctx } as const;
 }
 
 export type HubContext = NonNullable<Awaited<ReturnType<typeof hubContext>>["ctx"]>;
 
 /** Shorthand used by every hub route: wrap a body in the shell and return it as Liquid. */
 export const renderHub = (ctx: HubContext, active: HubSection | null, title: string, body: string) =>
-  ctx.liquid(hubPage({ base: ctx.base, active, title, customerName: ctx.customerName, testMode: ctx.testMode, body }));
+  ctx.liquid(
+    hubPage({ base: ctx.base, active, title, customerName: ctx.customerName, testMode: ctx.testMode, body, refOrder: ctx.refOrder ?? null }),
+  );

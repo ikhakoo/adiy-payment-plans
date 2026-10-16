@@ -3,7 +3,7 @@ import db from "../db.server";
 import { rewardTypes } from "../lib/rewards.server";
 import { esc, moneyRange } from "../lib/portal.server";
 import { hubContext, renderHub } from "../lib/hub.server";
-import { rewardIcon, rewardsLayout, rwIcon, sentSubmissions, tierBlock } from "../lib/hub-rewards.server";
+import { figIcon, rewardIcon, rewardsLayout, sentSubmissions, tierBlock } from "../lib/hub-rewards.server";
 
 // GET /apps/hub/rewards — Rewards › Earn rewards: the ways to earn, and where each order stands.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -44,7 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     <div class="card rw-tiers">
       ${tiers || `<p class="muted">There are no rewards to earn right now.</p>`}
       <div class="rw-note">
-        <span>${rwIcon("verified")}<span>Amazon gift card rewards<br>Subject to review and program terms.</span></span>
+        <span>${figIcon("badge")}<span>Amazon gift card rewards<br>Subject to review and program terms.</span></span>
         <b>Payouts in ~48 hrs</b>
       </div>
     </div>`;

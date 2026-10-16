@@ -7,6 +7,8 @@ import {
   fmtDay,
   hubInvoice,
   hubOrders,
+  invoiceNumber,
+  orderLabel,
   type HubAddress,
   type HubInvoice,
 } from "../lib/orders.server";
@@ -131,9 +133,10 @@ function invoiceBody(inv: HubInvoice, receipt: boolean, links: { invoice: string
   const top = `<div class="top">
       <div class="brand"><i>A</i><div><b>${esc(inv.shopName)}</b>${inv.shopEmail ? `<small>${esc(inv.shopEmail)}</small>` : ""}</div></div>
       <div>
-        <h1>${docTitle}</h1>
+        <h1>${receipt ? "Receipt" : `Invoice ${esc(invoiceNumber(o))}`}</h1>
         <dl class="facts">
-          <dt>${docTitle} for</dt><dd>Order ${esc(o.name)}</dd>
+          <dt>Invoice no.</dt><dd>${esc(invoiceNumber(o))}</dd>
+          <dt>Order</dt><dd>${esc(orderLabel(o))}</dd>
           <dt>Order date</dt><dd>${esc(fmtDay(o.createdAt))}</dd>
           ${receipt ? "" : `<dt>Issued</dt><dd>${esc(fmtDay(new Date()))}</dd>`}
         </dl>
@@ -244,7 +247,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const q = `?order=${order.numericId}`;
   return page(
-    `${receipt ? "Receipt" : "Invoice"} · Order ${order.name}`,
+    `${receipt ? "Receipt" : `Invoice ${invoiceNumber(order)}`} · Order ${orderLabel(order)}`,
     invoiceBody(inv, receipt, { invoice: ctx.url(`/invoice${q}`), receipt: ctx.url(`/invoice${q}&view=receipt`), back }),
   );
 };

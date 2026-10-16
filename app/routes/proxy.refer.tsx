@@ -2,7 +2,6 @@ import type { LoaderFunctionArgs } from "react-router";
 import db from "../db.server";
 import { esc, money, storefrontHosts } from "../lib/portal.server";
 import { referrerCodeFor } from "../lib/referrals.server";
-import { fmtDate } from "../lib/ledger.server";
 import { asset, hubContext, icon, renderHub } from "../lib/hub.server";
 import { rwIcon, usd } from "../lib/hub-rewards.server";
 
@@ -85,24 +84,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const qualifying = referrals.filter((r) => ["ORDERED", "QUALIFIED", "FLAGGED"].includes(r.status)).length;
   const pending = referrals.filter((r) => r.status === "ORDERED" || r.status === "FLAGGED").length;
-  const statusText = (r: (typeof referrals)[number]) =>
-    ({
-      ISSUED: "Has their code, waiting for an order",
-      ORDERED: r.qualifiesAt ? `Ordered. Your ${reward} unlocks ${fmtDate(r.qualifiesAt)}` : `Ordered. Your ${reward} unlocks ${settings.referralWaitDays} days after delivery`,
-      QUALIFIED: `${reward} earned`,
-      FLAGGED: "Ordered. Being reviewed by our team",
-      REJECTED: `Didn't qualify${r.rejectReason ? ` (${r.rejectReason.toLowerCase()})` : ""}`,
-      EXPIRED: "Code expired unused",
-    })[r.status];
-  const pillClass = (s: string) => (s === "QUALIFIED" ? "ok" : s === "REJECTED" || s === "EXPIRED" ? "bad" : "");
-  const rows = referrals
-    .map(
-      (r) => `<li><div>${esc(r.friendEmail.replace(/^(.).*(@.*)$/, "$1***$2"))}
-        <div class="muted">${fmtDate(r.createdAt)}</div>
-        <div style="margin-top:6px"><span class="pill dot ${pillClass(r.status)}" style="white-space:normal">${esc(statusText(r))}</span></div></div></li>`,
-    )
-    .join("");
-
   const stat = (cls: string, ico: string, title: string, sub: string, value: string) => `
     <div class="ref-stat${cls}">
       <span class="ref-stat-ico">${ico}</span>
@@ -122,7 +103,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         ${stat(" ready", rwIcon("wallet"), "Ready to redeem", "Approved referral rewards", usd(Number(credited._sum.amount ?? 0)))}
       </div>
       <a class="btn light ref-balance-btn" href="${ctx.url("/rewards/balance")}">${rwIcon("wallet")}View reward balance</a>
-      ${rows ? `<div class="label" style="margin:20px 0 4px">Your friends</div><ul class="rows">${rows}</ul>` : ""}
     </div>`;
 
   const steps = [

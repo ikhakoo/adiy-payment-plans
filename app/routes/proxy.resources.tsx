@@ -4,7 +4,7 @@ import { esc } from "../lib/portal.server";
 import { ARROW, asset, hubContext, icon, renderHub } from "../lib/hub.server";
 import { mainLine, orderSwitcher, selectedOrder } from "../lib/orders.server";
 import { orderResources } from "../lib/resources.server";
-import { deckOverview, pageLayout, readiness, type LayoutItem } from "../lib/resources";
+import { BUILD_TIME_UNSET, deckOverview, pageLayout, readiness, type LayoutItem } from "../lib/resources";
 import { deckProgress } from "../lib/tracking";
 
 const I = {
@@ -39,45 +39,45 @@ const SLOT_ICON: Record<string, string> = {
 };
 const KIND: Record<ResourceKind, { tag: string; icon: string }> = {
   PDF: { tag: "PDF", icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>' },
-  VIDEO: { tag: "Videos", icon: I.video },
+  VIDEO: { tag: "VIDEOS", icon: I.video },
   CHECKLIST: { tag: "Checklist", icon: I.checklist },
-  GUIDE: { tag: "Guide", icon: I.book },
+  GUIDE: { tag: "GUIDE", icon: I.book },
   LINK: { tag: "Link", icon: I.link },
   APP_3D: { tag: "3D app", icon: I.cube },
 };
 
 const link = (r: BuildResource) => `href="${esc(r.url)}" target="_blank" rel="noopener"`;
-const SOON = `<span class="res-soon">Coming soon</span>`;
 
 function itemParts({ slot: s, resource: r }: LayoutItem<BuildResource>) {
   return {
     title: esc(s?.title ?? r?.title ?? ""),
     // The design's copy for its own items; the merchant's description for extra rows.
     text: esc(s ? s.description : [r?.description, r?.meta].filter(Boolean).join(" · ")),
-    tag: esc(r?.meta || (s ? s.tag : r ? KIND[r.kind].tag : "")),
+    // Badge: the resource's own meta ("24 pgs") or kind; before upload, the kind the design gives the item.
+    tag: esc(r ? r.meta || KIND[r.kind].tag : (s?.tag ?? "")),
     ico: s ? SLOT_ICON[s.key] : r ? KIND[r.kind].icon : I.link,
   };
 }
 
-/** A row in "Before you build" / "Assembly guides": a link once uploaded, otherwise "Coming soon". */
+/** A row in "Before you build" / "Assembly guides": a link once uploaded, otherwise the same row without a link. */
 function row(item: LayoutItem<BuildResource>) {
   const p = itemParts(item);
   const inner = `<span class="res-i-ico">${icon(p.ico)}</span>
       <span class="res-i-text"><b>${p.title}</b>${p.text ? `<span>${p.text}</span>` : ""}</span>
-      ${item.resource ? `<span class="res-tag">${p.tag}</span>` : SOON}`;
+      ${p.tag ? `<span class="res-tag">${p.tag}</span>` : ""}`;
   return item.resource
     ? `<li><a class="res-item" ${link(item.resource)}>${inner}</a></li>`
-    : `<li><div class="res-item is-soon" aria-disabled="true">${inner}</div></li>`;
+    : `<li><div class="res-item is-pending" aria-disabled="true">${inner}</div></li>`;
 }
 
 /** A tile in "After your build". */
 function tile(item: LayoutItem<BuildResource>) {
   const p = itemParts(item);
   const inner = `<span class="res-t-ico">${icon(p.ico)}</span>
-      <span class="res-i-text"><b>${p.title}${item.resource ? icon(I.out) : ""}</b>${p.text ? `<span>${p.text}</span>` : ""}${item.resource ? "" : SOON}</span>`;
+      <span class="res-i-text"><b>${p.title}${item.resource ? icon(I.out) : ""}</b>${p.text ? `<span>${p.text}</span>` : ""}</span>`;
   return item.resource
     ? `<a class="res-tile" ${link(item.resource)}>${inner}</a>`
-    : `<div class="res-tile is-soon" aria-disabled="true">${inner}</div>`;
+    : `<div class="res-tile is-pending" aria-disabled="true">${inner}</div>`;
 }
 
 function sectionHead(dot: string, heading: string, aside: string) {
@@ -85,7 +85,7 @@ function sectionHead(dot: string, heading: string, aside: string) {
 }
 
 // GET /apps/hub/resources — Build Resources for the selected order's kit: the installation guide,
-// deck overview, and every design item (plans, guides, videos), "Coming soon" until it's uploaded.
+// deck overview, and every design item (plans, guides, videos): links once uploaded, plain rows until then.
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { page, ctx } = await hubContext(request);
   if (page) return page;
@@ -121,7 +121,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const specRow = (ico: string, label: string, value: string) =>
     `<div class="res-spec-row">${icon(ico)}<div><span>${label}</span><b>${esc(value)}</b></div></div>`;
-  const specs = [deck.specLabel && specRow(I.compass, "Kit spec", deck.specLabel), deck.buildTime && specRow(I.clock, "Estimated build", deck.buildTime)]
+  const specs = [deck.specLabel && specRow(I.compass, "Kit spec", deck.specLabel), specRow(I.clock, "Estimated build", deck.buildTime ?? BUILD_TIME_UNSET)]
     .filter(Boolean)
     .join(`<hr>`);
 
@@ -134,12 +134,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ${
             guide
               ? `<a class="res-btn white" ${link(guide)}>${icon(I.folder)}Download guide${ARROW}</a>`
-              : `<span class="res-btn white is-soon" aria-disabled="true">${icon(I.folder)}Guide coming soon</span>`
+              : `<span class="res-btn white is-pending" aria-disabled="true">${icon(I.folder)}Download guide${ARROW}</span>`
           }
           ${
             video
               ? `<a class="res-btn ghost" ${link(video)}>${icon(I.play)}Watch assembly video</a>`
-              : `<span class="res-btn ghost is-soon" aria-disabled="true">${icon(I.play)}Video coming soon</span>`
+              : `<span class="res-btn ghost is-pending" aria-disabled="true">${icon(I.play)}Watch assembly video</span>`
           }
         </div>
       </div>

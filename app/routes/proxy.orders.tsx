@@ -6,6 +6,8 @@ import {
   cents,
   deliveryNote,
   fmtDay,
+  invoiceNumber,
+  orderLabel,
   orderQuery,
   orderSwitcher,
   paymentTotals,
@@ -34,22 +36,28 @@ function paymentRow(o: HubOrder) {
   // its outstanding balance is used: that's what's still to be charged.
   const { total, paid, remaining } = paymentTotals(o);
 
+  // Real payment method from the order's transactions (card, else gateway name); older callers may
+  // only have `card`.
+  const method = o.paymentMethod ?? o.card ?? null;
   let detail: string;
   if (plan) {
     const made = plan.installments.filter((i) => i.status === "PAID").length;
     const next = plan.installments.find((i) => ["SCHEDULED", "PROCESSING", "FAILED"].includes(i.status));
     const parts = [`Pay in ${plan.installmentsCount}`, `${made} of ${plan.installmentsCount} payments made`];
-    if (plan.status === "COMPLETED" || !next) parts.push("Paid in full");
+    if (plan.status === "COMPLETED" || !next) parts.push(method ? `Paid in full with ${method}` : "Paid in full");
     else {
       // A failed payment is retried on nextAttemptAt, which is then the real next charge.
       const when = next.status === "FAILED" && next.nextAttemptAt ? next.nextAttemptAt : next.dueDate;
       parts.push(`Next payment ${fmtDay(when)} · ${amount(Number(next.amount))}`);
+      if (method) parts.push(`First payment with ${method}`);
     }
     detail = esc(parts.join(" · "));
   } else if (remaining <= 0) {
-    detail = esc(o.card ? `Paid in full with ${o.card}` : "Paid in full");
+    if (method) detail = esc(`Paid in full with ${method}`);
+    // No payment transactions: a $0 order, or a payment our team recorded by hand.
+    else detail = esc(total <= 0 ? "No payment was needed for this order" : "Paid in full · payment recorded by our team");
   } else {
-    detail = `${esc(amount(remaining))} remaining on this order`;
+    detail = esc(`${amount(remaining)} remaining on this order${paid > 0 && method ? ` · paid so far with ${method}` : ""}`);
   }
   const failed = plan?.installments.some((i) => i.status === "FAILED");
 
@@ -138,7 +146,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           <span class="ord-tile">${icon(I.box)}</span>
           <div>
             <div class="label">Your order</div>
-            <h2 class="ord-title">Order ${esc(order.name)}</h2>
+            <h2 class="ord-title">Order ${esc(orderLabel(order))}</h2>
           </div>
         </div>
         <div class="ord-meta">
@@ -161,8 +169,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         <section class="ord-row">
           <div class="ord-row-label"><div class="label">03 · Archival</div><div class="ord-row-title">Order documents</div></div>
           <div class="ord-docs">
-            ${doc(invoiceUrl, I.fileText, `Invoice ${order.name}`, I.download, "Printable invoice: save it as a PDF from the print dialog")}
-            ${doc(order.statusPageUrl, I.fileCheck, "Order confirmation", I.external, "Your order status page from checkout")}
+            ${doc(invoiceUrl, I.fileText, `Invoice #${invoiceNumber(order)}`, I.download, "Printable invoice: save it as a PDF from the print dialog")}
+            ${doc(order.statusPageUrl, I.fileCheck, "Order confirmation", I.download, "Your order status page from checkout")}
             ${doc(receiptUrl, I.receipt, "Receipts & tax details", I.download, "Payments received and tax breakdown, printable")}
           </div>
         </section>

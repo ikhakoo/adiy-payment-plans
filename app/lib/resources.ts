@@ -63,7 +63,7 @@ export function specForOrder<T extends SpecRow>(lines: OrderLine[], specs: T[]) 
 
 export type LayoutSection = Exclude<ResourceSectionKey, "HERO">;
 
-/** One fixed item from the design. It shows as "Coming soon" until a matching resource is uploaded. */
+/** One fixed item from the design. It shows without a link until a matching resource is uploaded. */
 export interface Slot {
   key: string;
   section: LayoutSection;
@@ -91,7 +91,7 @@ export const SLOTS: Slot[] = [
 export interface LayoutItem<T> {
   /** The design slot this row fills, or null for an extra resource the merchant added. */
   slot: Slot | null;
-  /** The uploaded resource, or null while it's "Coming soon". */
+  /** The uploaded resource, or null until one is uploaded (the row then shows without a link). */
   resource: T | null;
 }
 
@@ -171,9 +171,23 @@ export function deckOverview(spec: KitSpecFields | null, line: { title: string; 
   };
 }
 
+/** "Estimated build" when the kit spec has no build time: the row stays, but no duration is made up. */
+export const BUILD_TIME_UNSET = "To be confirmed";
+
 /** The "Readiness" card, from where the deck is in its journey (tracking.ts's DeckStep). */
 export function readiness(step: "production" | "packing" | "shipped" | "delivered") {
   if (step === "delivered") return { stage: "03", label: "Ready to build", percent: 75 };
   if (step === "shipped") return { stage: "02", label: "Arriving soon", percent: 50 };
   return { stage: "01", label: "Ready to prep", percent: 25 };
+}
+
+/** "Updated 3 days ago" under the Overview's resources card, from the newest resource's updatedAt. */
+export function updatedAgo(rows: { updatedAt: Date }[], now = new Date()) {
+  if (!rows.length) return null;
+  const latest = rows.reduce((max, r) => (r.updatedAt > max ? r.updatedAt : max), rows[0].updatedAt);
+  const days = Math.max(0, Math.floor((now.getTime() - latest.getTime()) / (24 * 60 * 60 * 1000)));
+  if (days === 0) return "Updated today";
+  if (days === 1) return "Updated 1 day ago";
+  if (days < 60) return `Updated ${days} days ago`;
+  return `Updated ${latest.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
 }

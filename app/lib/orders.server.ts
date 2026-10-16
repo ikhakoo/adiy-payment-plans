@@ -27,7 +27,8 @@ const HUB_ORDERS = `#graphql
             kind
             status
             gateway
-            paymentDetails { ... on CardPaymentDetails { company number } }
+            formattedGateway
+            paymentDetails { __typename ... on CardPaymentDetails { company number } }
           }
           shippingAddress { name address1 address2 city provinceCode zip countryCodeV2 phone }
           billingAddress { name address1 address2 city provinceCode zip countryCodeV2 phone }
@@ -98,6 +99,12 @@ export interface HubOrder {
   currency: string;
   /** e.g. "Visa ending in 4242", from the first successful card sale/authorization. */
   card: string | null;
+  /**
+   * How the order was paid, from its successful transactions: "Visa ending in 4242", or the
+   * gateway/method name ("Affirm", "Shop Pay Installments") when it wasn't a card. Null when the
+   * order has no payment transactions (e.g. a $0 or manually recorded order).
+   */
+  paymentMethod?: string | null;
   shippingAddress: HubAddress | null;
   /** Billing address entered at checkout (optional so older mocks/callers without it still type-check). */
   billingAddress?: HubAddress | null;
@@ -121,7 +128,13 @@ type RawOrder = Omit<
   currentTotalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
   totalReceivedSet: { shopMoney: { amount: string } };
   totalOutstandingSet: { shopMoney: { amount: string } };
-  transactions: { kind: string; status: string; gateway: string | null; paymentDetails: { company?: string; number?: string } | null }[];
+  transactions: {
+    kind: string;
+    status: string;
+    gateway: string | null;
+    formattedGateway?: string | null;
+    paymentDetails: { __typename?: string; company?: string; number?: string } | null;
+  }[];
   lineItems: {
     nodes: {
       title: string;
@@ -172,6 +185,7 @@ async function loadOrders(ctx: HubContext): Promise<HubOrder[]> {
       outstanding: Number(o.totalOutstandingSet.shopMoney.amount),
       currency: o.currentTotalPriceSet.shopMoney.currencyCode,
       card: cardTx && last4 ? `${cardTx.paymentDetails?.company ?? "Card"} ending in ${last4}` : null,
+      paymentMethod: paymentMethod(o.transactions),
       lineItems: o.lineItems.nodes.map((l) => ({
         title: l.title,
         variantTitle: l.variantTitle,
@@ -185,11 +199,43 @@ async function loadOrders(ctx: HubContext): Promise<HubOrder[]> {
   });
 }
 
+const GATEWAY_NAMES: Record<string, string> = {
+  shopify_payments: "Shopify Payments",
+  shop_pay_installments: "Shop Pay Installments",
+  manual: "Manual payment",
+  bogus: "Test gateway",
+  gift_card: "Gift card",
+};
+
+/** Customer-facing payment method from an order's successful payment transactions. */
+export function paymentMethod(transactions: RawOrder["transactions"]) {
+  const paid = transactions.filter((t) => t.status === "SUCCESS" && ["SALE", "CAPTURE", "AUTHORIZATION"].includes(t.kind));
+  const card = paid.find((t) => t.paymentDetails?.number);
+  const last4 = card?.paymentDetails?.number?.replace(/\D/g, "").slice(-4);
+  if (card && last4) return `${card.paymentDetails?.company ?? "Card"} ending in ${last4}`;
+  const tx = paid[0];
+  if (!tx) return null;
+  if (tx.paymentDetails?.__typename === "ShopPayInstallmentsPaymentDetails") return "Shop Pay Installments";
+  const gateway = tx.formattedGateway || (tx.gateway ? (GATEWAY_NAMES[tx.gateway] ?? tx.gateway) : "");
+  return gateway || null;
+}
+
+/** "#212481899" whether or not the store's order names carry the "#". */
+export const orderLabel = (o: Pick<HubOrder, "name"> | string) => {
+  const name = (typeof o === "string" ? o : o.name).trim();
+  return name.startsWith("#") ? name : `#${name}`;
+};
+
+/** "INV-212481899": the order number's digits, used on the My Orders button and the invoice. */
+export const invoiceNumber = (o: Pick<HubOrder, "name" | "numericId">) => `INV-${o.name.replace(/\D/g, "") || o.numericId}`;
+
 /** The order the page is about: ?order=<numeric id> if it's one of theirs, else the newest. */
 export async function selectedOrder(ctx: HubContext, request: Request) {
   const orders = await hubOrders(ctx);
   const wanted = new URL(request.url).searchParams.get("order")?.replace(/\D/g, "");
   const order = orders.find((o) => o.numericId === wanted) ?? orders[0] ?? null;
+  // The shell's phone header shows it as "REF: #…".
+  ctx.refOrder = order ? orderLabel(order) : null;
   return { orders, order };
 }
 
@@ -215,8 +261,8 @@ export function orderSwitcher(ctx: HubContext, path: string, orders: HubOrder[],
   const options = orders
     .map((o) => {
       const line = mainLine(o);
-      const label = `${o.name}${line ? ` · ${line.title}` : ""}`;
-      return `<option value="${esc(o.numericId)}" data-title="${esc(`Order ${o.name}`)}" data-sub="${esc(line?.title ?? "")}" data-meta="${esc(fmtDay(o.createdAt))}"${o.id === selected.id ? " selected" : ""}>${esc(label)}</option>`;
+      const label = `${orderLabel(o)}${line ? ` · ${line.title}` : ""}`;
+      return `<option value="${esc(o.numericId)}" data-title="${esc(`Order ${orderLabel(o)}`)}" data-sub="${esc(line?.title ?? "")}" data-meta="${esc(fmtDay(o.createdAt))}"${o.id === selected.id ? " selected" : ""}>${esc(label)}</option>`;
     })
     .join("");
   return `<form class="order-switch sw" method="get" action="${esc(ctx.url(path))}" data-sw>
@@ -251,6 +297,10 @@ export const HUB_ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  chevronRight: '<path d="m9 18 6-6-6-6"/>',
+  bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+  lock: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   printer: '<path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
   arrowLeft: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
   trash: '<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
@@ -312,7 +362,7 @@ const HUB_INVOICE = `#graphql
         processedAt
         createdAt
         amountSet { shopMoney { amount } }
-        paymentDetails { ... on CardPaymentDetails { company number } }
+        paymentDetails { __typename ... on CardPaymentDetails { company number } }
       }
     }
   }`;
@@ -349,7 +399,7 @@ interface RawInvoice {
       processedAt: string | null;
       createdAt: string;
       amountSet: Money;
-      paymentDetails: { company?: string; number?: string } | null;
+      paymentDetails: { __typename?: string; company?: string; number?: string } | null;
     }[];
   } | null;
 }
@@ -402,8 +452,7 @@ export async function hubInvoice(ctx: HubContext, order: HubOrder): Promise<HubI
   const payments = o.transactions
     .filter((t) => t.status === "SUCCESS" && ["SALE", "CAPTURE", "REFUND"].includes(t.kind))
     .map((t) => {
-      const last4 = t.paymentDetails?.number?.replace(/\D/g, "").slice(-4);
-      const method = last4 ? `${t.paymentDetails?.company ?? "Card"} ending in ${last4}` : t.formattedGateway || t.gateway || "Payment";
+      const method = paymentMethod([{ ...t, kind: "SALE" }]) ?? "Payment";
       return {
         date: t.processedAt ?? t.createdAt,
         method,
